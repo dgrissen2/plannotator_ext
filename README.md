@@ -15,6 +15,8 @@ Interactive Plan Review: Mark up and refine your plans using a UI, easily share 
 
 ## Install
 
+Install the plannotator command so Claude Code can use it:
+
 **macOS / Linux / WSL:**
 
 ```bash
