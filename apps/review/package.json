@@ -1,17 +1,18 @@
 {
-  "name": "@plannotator/hooks",
+  "name": "@plannotator/review",
   "private": true,
   "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && cp dist/index.html dist/redline.html && cp ../review/dist/index.html dist/review.html",
+    "build": "vite build",
     "serve": "bun run server/index.ts"
   },
   "dependencies": {
-    "@plannotator/editor": "workspace:*",
+    "@plannotator/review-editor": "workspace:*",
     "@plannotator/server": "workspace:*",
     "@plannotator/ui": "workspace:*",
+    "@pierre/diffs": "^1.0.4",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "tailwindcss": "^4.1.18",
