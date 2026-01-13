@@ -12,7 +12,7 @@ $arch = if ([Environment]::Is64BitOperatingSystem) {
     exit 1
 }
 
-$platform = "windows-$arch"
+$platform = "win32-$arch"
 $binaryName = "plannotator-$platform.exe"
 
 Write-Host "Fetching latest version..."
