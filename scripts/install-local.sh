@@ -5,6 +5,24 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local}/bin"
 
+# Find bun - check common locations if not in PATH
+if ! command -v bun &> /dev/null; then
+    # Try common bun install locations
+    if [ -x "$HOME/.bun/bin/bun" ]; then
+        export PATH="$HOME/.bun/bin:$PATH"
+    elif [ -x "/opt/homebrew/bin/bun" ]; then
+        export PATH="/opt/homebrew/bin:$PATH"
+    elif [ -x "/usr/local/bin/bun" ]; then
+        export PATH="/usr/local/bin:$PATH"
+    else
+        echo "Error: bun not found. Install it with:"
+        echo "  curl -fsSL https://bun.sh/install | bash"
+        exit 1
+    fi
+fi
+
+echo "Using bun at: $(which bun)"
+
 # Detect platform
 case "$(uname -s)" in
     Darwin) os="darwin" ;;
