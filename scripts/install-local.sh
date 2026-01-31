@@ -23,6 +23,9 @@ fi
 
 echo "Using bun at: $(which bun)"
 
+# Ensure node_modules/.bin is in PATH for nested script calls
+export PATH="$REPO_DIR/node_modules/.bin:$PATH"
+
 # Detect platform
 case "$(uname -s)" in
     Darwin) os="darwin" ;;
@@ -40,6 +43,12 @@ platform="bun-${os}-${arch}"
 
 echo "Building plannotator from source..."
 cd "$REPO_DIR"
+
+# Install dependencies if needed
+if [ ! -d "node_modules" ]; then
+    echo "Installing dependencies..."
+    bun install
+fi
 
 # Build the UI first
 echo "Building UI..."
