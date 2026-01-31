@@ -34,6 +34,8 @@ export interface DocServerOptions {
   origin?: "opencode" | "claude-code";
   /** Whether URL sharing is enabled (default: true) */
   sharingEnabled?: boolean;
+  /** Project root directory for resolving relative paths (defaults to cwd at server start) */
+  projectRoot?: string;
   /** Called when server starts with the URL, remote status, and port */
   onReady?: (url: string, isRemote: boolean, port: number) => void;
   /** OpenCode client for querying available agents (OpenCode only) */
@@ -81,13 +83,16 @@ export async function startDocServer(
 ): Promise<DocServerResult> {
   const { markdown, filepath, htmlContent, origin, sharingEnabled = true, onReady } = options;
 
+  // Capture project root at server start (before any async operations change cwd)
+  const projectRoot = options.projectRoot || process.cwd();
+
   const isRemote = isRemoteSession();
   const configuredPort = getServerPort();
 
   // Detect repo info (cached for this session)
   const repoInfo = await getRepoInfo();
 
-  // Base directory for resolving relative paths
+  // Base directory for resolving relative paths (document's directory)
   const baseDir = dirname(resolve(filepath));
 
   // Decision promise
@@ -125,24 +130,87 @@ export async function startDocServer(
             if (requestedPath) {
               // Loading a linked document
               try {
-                const resolvedPath = resolve(baseDir, requestedPath);
+                // Try multiple resolution strategies:
+                // 1. If absolute path, use as-is
+                // 2. Resolve relative to document's directory (baseDir)
+                // 3. If not found, try resolving relative to projectRoot
+                // 4. If bare filename (no /), search projectRoot for exact name match
+                let resolvedPath: string;
+                let file: ReturnType<typeof Bun.file>;
+                let found = false;
 
-                // SEC-1: Validate path stays within baseDir (prevent path traversal)
-                if (!resolvedPath.startsWith(baseDir + "/") && resolvedPath !== baseDir) {
+                if (requestedPath.startsWith('/')) {
+                  // Absolute path
+                  resolvedPath = requestedPath;
+                  file = Bun.file(resolvedPath);
+                  found = await file.exists();
+                } else {
+                  // Try relative to document directory first
+                  resolvedPath = resolve(baseDir, requestedPath);
+                  file = Bun.file(resolvedPath);
+                  found = await file.exists();
+
+                  if (!found) {
+                    // Not found - try relative to projectRoot
+                    const projectResolved = resolve(projectRoot, requestedPath);
+                    const projectFile = Bun.file(projectResolved);
+                    if (await projectFile.exists()) {
+                      resolvedPath = projectResolved;
+                      found = true;
+                    }
+                  }
+
+                  // If still not found and it's a bare filename (no path separator),
+                  // search the entire projectRoot for exact name matches
+                  if (!found && !requestedPath.includes('/')) {
+                    const glob = new Bun.Glob(`**/${requestedPath}`);
+                    const matches: string[] = [];
+
+                    for await (const match of glob.scan({ cwd: projectRoot, onlyFiles: true })) {
+                      // Only include if the filename matches exactly (not just ends with)
+                      const matchFilename = match.split('/').pop();
+                      if (matchFilename === requestedPath) {
+                        matches.push(resolve(projectRoot, match));
+                      }
+                    }
+
+                    if (matches.length === 1) {
+                      resolvedPath = matches[0];
+                      found = true;
+                    } else if (matches.length > 1) {
+                      // Ambiguous - multiple files with same name
+                      const relativePaths = matches.map(m => m.replace(projectRoot + '/', ''));
+                      return Response.json(
+                        {
+                          error: `Ambiguous filename '${requestedPath}' - found ${matches.length} matches:\n${relativePaths.join('\n')}`
+                        },
+                        { status: 400 }
+                      );
+                    }
+                  }
+                }
+
+                // SEC-1: Validate path stays within allowed directories
+                const allowedBases = [baseDir, projectRoot];
+                const isAllowed = allowedBases.some(base =>
+                  resolvedPath === base || resolvedPath.startsWith(base + "/")
+                );
+
+                if (!isAllowed) {
                   return Response.json(
                     { error: "Path traversal attempt blocked" },
                     { status: 403 }
                   );
                 }
 
-                const file = Bun.file(resolvedPath);
-
-                if (!(await file.exists())) {
+                if (!found) {
                   return Response.json(
                     { error: `File not found: ${requestedPath}` },
                     { status: 404 }
                   );
                 }
+
+                file = Bun.file(resolvedPath);
 
                 const content = await file.text();
                 return Response.json({

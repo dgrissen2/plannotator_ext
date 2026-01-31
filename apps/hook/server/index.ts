@@ -112,11 +112,15 @@ if (args[0] === "review") {
   const markdown = await file.text();
 
   // Start doc review server
+  // Capture cwd at startup - this is the directory where the command was run
+  const projectRoot = process.cwd();
+
   const server = await startDocServer({
     markdown,
     filepath,
     origin: "claude-code",
     sharingEnabled,
+    projectRoot, // Pass project root for resolving relative paths in linked docs
     htmlContent: planHtmlContent, // Reuse plan UI
     onReady: handleDocServerReady,
   });

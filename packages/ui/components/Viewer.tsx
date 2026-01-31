@@ -863,11 +863,33 @@ const InlineMarkdown: React.FC<{ text: string }> = ({ text }) => {
     // Inline code: `code`
     match = remaining.match(/^`([^`]+)`/);
     if (match) {
-      parts.push(
-        <code key={key++} className="px-1.5 py-0.5 rounded bg-muted text-sm font-mono">
-          {match[1]}
-        </code>
-      );
+      const codeContent = match[1];
+      const isMarkdownFile = /\.md$/i.test(codeContent) || /\.markdown$/i.test(codeContent);
+
+      // Make .md file paths clickable links (styled as code)
+      if (isMarkdownFile && !codeContent.startsWith('http://') && !codeContent.startsWith('https://')) {
+        parts.push(
+          <a
+            key={key++}
+            href={`/?doc=${encodeURIComponent(codeContent)}&readonly=true`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-1.5 py-0.5 rounded bg-muted text-sm font-mono text-primary hover:text-primary/80 hover:bg-muted/80 inline-flex items-center gap-1 no-underline"
+            title={`Preview: ${codeContent}`}
+          >
+            {codeContent}
+            <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+          </a>
+        );
+      } else {
+        parts.push(
+          <code key={key++} className="px-1.5 py-0.5 rounded bg-muted text-sm font-mono">
+            {codeContent}
+          </code>
+        );
+      }
       remaining = remaining.slice(match[0].length);
       continue;
     }
@@ -911,6 +933,30 @@ const InlineMarkdown: React.FC<{ text: string }> = ({ text }) => {
           </a>
         );
       }
+      remaining = remaining.slice(match[0].length);
+      continue;
+    }
+
+    // Auto-link bare .md/.markdown file paths (e.g., docs/API.md or ./README.md)
+    match = remaining.match(/^(\.{0,2}\/)?([a-zA-Z0-9_\-./]+\.(?:md|markdown))/i);
+    if (match) {
+      const filePath = match[0];
+      parts.push(
+        <a
+          key={key++}
+          href={`/?doc=${encodeURIComponent(filePath)}&readonly=true`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline underline-offset-2 hover:text-primary/80 inline-flex items-center gap-1 font-mono text-sm"
+          title={`Preview: ${filePath}`}
+        >
+          {filePath}
+          <svg className="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+        </a>
+      );
       remaining = remaining.slice(match[0].length);
       continue;
     }
