@@ -10,10 +10,12 @@
  */
 
 import { mkdirSync } from "fs";
+import { homedir } from "os";
 import { isRemoteSession, getServerPort } from "./remote";
 import { openBrowser } from "./browser";
 import { type DiffType, type GitContext, runGitDiff } from "./git";
 import { getRepoInfo } from "./repo";
+import { validatePath } from "./security";
 
 // Re-export utilities
 export { isRemoteSession, getServerPort } from "./remote";
@@ -172,12 +174,21 @@ export async function startReviewServer(
               return new Response("Missing path parameter", { status: 400 });
             }
             try {
-              const file = Bun.file(imagePath);
+              // Validate path is within allowed directories
+              const cwd = process.cwd();
+              const allowedBases = ["/tmp/plannotator", homedir(), cwd];
+              const validatedPath = validatePath(imagePath, allowedBases);
+
+              const file = Bun.file(validatedPath);
               if (!(await file.exists())) {
                 return new Response("File not found", { status: 404 });
               }
               return new Response(file);
-            } catch {
+            } catch (err) {
+              const message = err instanceof Error ? err.message : "Failed to read file";
+              if (message.includes("Path not allowed")) {
+                return new Response("Access denied", { status: 403 });
+              }
               return new Response("Failed to read file", { status: 500 });
             }
           }

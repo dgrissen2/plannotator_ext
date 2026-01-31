@@ -133,19 +133,32 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
 
-/* Code blocks */
-pre code.hljs {
+/* Code blocks - base styling for all code (highlighted or not) */
+pre code {
   display: block;
   padding: 1rem;
   border-radius: var(--radius);
-  background: var(--muted) !important;
+  background: var(--muted);
   font-size: 0.8125rem;
   line-height: 1.6;
+  color: var(--foreground);
 }
 
-/* Light mode code - override hljs dark theme */
+/* Light mode base code - ensure readability regardless of highlighting */
+.light pre code {
+  background: oklch(0.94 0.01 260);
+  color: oklch(0.20 0.02 260);
+}
+
+/* Highlighted code blocks */
+pre code.hljs {
+  background: var(--muted) !important;
+}
+
+/* Light mode highlighted code - override hljs dark theme */
 .light pre code.hljs {
-  color: oklch(0.25 0.02 260) !important;
+  background: oklch(0.94 0.01 260) !important;
+  color: oklch(0.20 0.02 260) !important;
 }
 
 .light .hljs-keyword,

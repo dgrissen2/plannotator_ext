@@ -7,8 +7,9 @@
 
 import { homedir } from "os";
 import { join } from "path";
-import { mkdirSync, writeFileSync } from "fs";
+import { mkdirSync, writeFileSync, existsSync } from "fs";
 import { sanitizeTag } from "./project";
+import { atomicWrite } from "./atomic";
 
 /**
  * Get the plan storage directory, creating it if needed.
@@ -54,25 +55,52 @@ export function generateSlug(plan: string): string {
 }
 
 /**
+ * Generate a unique slug by appending a counter if needed.
+ * Checks if file exists and appends -2, -3, etc. until unique.
+ */
+export function generateUniqueSlug(plan: string, customPath?: string | null): string {
+  const baseSlug = generateSlug(plan);
+  const planDir = getPlanDir(customPath);
+
+  // Check if base slug file exists
+  const basePath = join(planDir, `${baseSlug}.md`);
+  if (!existsSync(basePath)) {
+    return baseSlug;
+  }
+
+  // Append counter until we find a unique slug
+  let counter = 2;
+  while (counter < 1000) {
+    const slug = `${baseSlug}-${counter}`;
+    const filePath = join(planDir, `${slug}.md`);
+    if (!existsSync(filePath)) {
+      return slug;
+    }
+    counter++;
+  }
+
+  // Fallback: use timestamp
+  return `${baseSlug}-${Date.now()}`;
+}
+
+/**
  * Save the plan markdown to disk.
  * Returns the full path to the saved file.
  */
-export function savePlan(slug: string, content: string, customPath?: string | null): string {
+export async function savePlan(slug: string, content: string, customPath?: string | null): Promise<string> {
   const planDir = getPlanDir(customPath);
   const filePath = join(planDir, `${slug}.md`);
-  writeFileSync(filePath, content, "utf-8");
-  return filePath;
+  return atomicWrite(filePath, content);
 }
 
 /**
  * Save annotations (diff) to disk.
  * Returns the full path to the saved file.
  */
-export function saveAnnotations(slug: string, diffContent: string, customPath?: string | null): string {
+export async function saveAnnotations(slug: string, diffContent: string, customPath?: string | null): Promise<string> {
   const planDir = getPlanDir(customPath);
   const filePath = join(planDir, `${slug}.diff.md`);
-  writeFileSync(filePath, diffContent, "utf-8");
-  return filePath;
+  return atomicWrite(filePath, diffContent);
 }
 
 /**
@@ -80,13 +108,13 @@ export function saveAnnotations(slug: string, diffContent: string, customPath?: 
  * Combines plan and diff into a single file with status suffix.
  * Returns the full path to the saved file.
  */
-export function saveFinalSnapshot(
+export async function saveFinalSnapshot(
   slug: string,
   status: "approved" | "denied",
   plan: string,
   diff: string,
   customPath?: string | null
-): string {
+): Promise<string> {
   const planDir = getPlanDir(customPath);
   const filePath = join(planDir, `${slug}-${status}.md`);
 
@@ -96,6 +124,5 @@ export function saveFinalSnapshot(
     content += "\n\n---\n\n" + diff;
   }
 
-  writeFileSync(filePath, content, "utf-8");
-  return filePath;
+  return atomicWrite(filePath, content);
 }

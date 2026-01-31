@@ -351,6 +351,8 @@ const App: React.FC = () => {
   const [isDocMode, setIsDocMode] = useState(false);
   const [docFilepath, setDocFilepath] = useState<string | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
+  const [linkedDocsViewed, setLinkedDocsViewed] = useState<string[]>([]);
+  const [linkedDocsRequested, setLinkedDocsRequested] = useState<string[]>([]);
   const viewerRef = useRef<ViewerHandle>(null);
 
   // URL-based sharing
@@ -391,6 +393,23 @@ const App: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [pendingSharedAnnotations, clearPendingSharedAnnotations]);
+
+  // Listen for messages from child windows (linked doc tracking)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'requestReview' && event.data?.path) {
+        const path = event.data.path;
+        setLinkedDocsRequested(prev => [...new Set([...prev, path])]);
+      }
+      if (event.data?.type === 'linkedDocViewed' && event.data?.path) {
+        const path = event.data.path;
+        setLinkedDocsViewed(prev => [...new Set([...prev, path])]);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const handleTaterModeChange = (enabled: boolean) => {
     setTaterMode(enabled);
@@ -625,6 +644,14 @@ const App: React.FC = () => {
         feedback: diffOutput,
         annotations: annotations,
       };
+
+      // Include linked docs for doc mode
+      if (isDocMode && (linkedDocsViewed.length > 0 || linkedDocsRequested.length > 0)) {
+        body.linkedDocs = {
+          viewed: linkedDocsViewed,
+          requested: linkedDocsRequested,
+        };
+      }
 
       // Include plan save settings for plan mode
       if (!isDocMode) {
@@ -876,29 +903,44 @@ const App: React.FC = () => {
 
         {/* Read-only banner for linked documents */}
         {isReadOnly && (
-          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-amber-200">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-              <span>Read-only preview</span>
-              {docFilepath && (
-                <span className="text-amber-200/60 font-mono text-xs truncate max-w-md">{docFilepath}</span>
-              )}
+          <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-700/50 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-lg">📖</span>
+              <div>
+                <div className="text-sm font-medium text-amber-800 dark:text-amber-200">Read-Only Preview</div>
+                {docFilepath && (
+                  <div className="text-xs text-amber-600 dark:text-amber-400 font-mono truncate max-w-md">{docFilepath}</div>
+                )}
+              </div>
             </div>
-            <button
-              onClick={() => {
-                const cmd = `/plannotator-doc ${docFilepath}`;
-                navigator.clipboard.writeText(cmd);
-              }}
-              className="px-2 py-1 text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 rounded transition-colors flex items-center gap-1.5"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              Copy command to annotate
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const cmd = `/plannotator-doc ${docFilepath}`;
+                  navigator.clipboard.writeText(cmd);
+                }}
+                className="px-3 py-1.5 text-sm bg-amber-200 dark:bg-amber-800/50 hover:bg-amber-300 dark:hover:bg-amber-700/50 text-amber-800 dark:text-amber-200 rounded transition-colors flex items-center gap-1.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy Command
+              </button>
+              <button
+                onClick={() => {
+                  if (docFilepath) {
+                    // Track this as a review request and notify parent window
+                    window.opener?.postMessage({ type: 'requestReview', path: docFilepath }, '*');
+                  }
+                }}
+                className="px-3 py-1.5 text-sm bg-primary hover:bg-primary/90 text-primary-foreground rounded transition-colors flex items-center gap-1.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                Request Review
+              </button>
+            </div>
           </div>
         )}
 

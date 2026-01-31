@@ -13,7 +13,9 @@
     "./browser": "./browser.ts",
     "./storage": "./storage.ts",
     "./git": "./git.ts",
-    "./repo": "./repo.ts"
+    "./repo": "./repo.ts",
+    "./security": "./security.ts",
+    "./atomic": "./atomic.ts"
   },
   "files": [
     "*.ts"

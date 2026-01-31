@@ -10,6 +10,7 @@
  */
 
 import { mkdirSync } from "fs";
+import { homedir } from "os";
 import { isRemoteSession, getServerPort } from "./remote";
 import { openBrowser } from "./browser";
 import {
@@ -26,6 +27,7 @@ import {
   saveFinalSnapshot,
 } from "./storage";
 import { getRepoInfo } from "./repo";
+import { validatePath } from "./security";
 
 // Re-export utilities
 export { isRemoteSession, getServerPort } from "./remote";
@@ -144,12 +146,20 @@ export async function startPlannotatorServer(
               return new Response("Missing path parameter", { status: 400 });
             }
             try {
-              const file = Bun.file(imagePath);
+              // Validate path is within allowed directories
+              const allowedBases = ["/tmp/plannotator", homedir()];
+              const validatedPath = validatePath(imagePath, allowedBases);
+
+              const file = Bun.file(validatedPath);
               if (!(await file.exists())) {
                 return new Response("File not found", { status: 404 });
               }
               return new Response(file);
-            } catch {
+            } catch (err) {
+              const message = err instanceof Error ? err.message : "Failed to read file";
+              if (message.includes("Path not allowed")) {
+                return new Response("Access denied", { status: 403 });
+              }
               return new Response("Failed to read file", { status: 500 });
             }
           }
@@ -269,9 +279,9 @@ export async function startPlannotatorServer(
             if (planSaveEnabled) {
               const diff = feedback || "";
               if (diff) {
-                saveAnnotations(slug, diff, planSaveCustomPath);
+                await saveAnnotations(slug, diff, planSaveCustomPath);
               }
-              savedPath = saveFinalSnapshot(slug, "approved", plan, diff, planSaveCustomPath);
+              savedPath = await saveFinalSnapshot(slug, "approved", plan, diff, planSaveCustomPath);
             }
 
             // Use permission mode from client request if provided, otherwise fall back to hook input
@@ -304,8 +314,8 @@ export async function startPlannotatorServer(
             // Save annotations and final snapshot (if enabled)
             let savedPath: string | undefined;
             if (planSaveEnabled) {
-              saveAnnotations(slug, feedback, planSaveCustomPath);
-              savedPath = saveFinalSnapshot(slug, "denied", plan, feedback, planSaveCustomPath);
+              await saveAnnotations(slug, feedback, planSaveCustomPath);
+              savedPath = await saveFinalSnapshot(slug, "denied", plan, feedback, planSaveCustomPath);
             }
 
             resolveDecision({ approved: false, feedback, savedPath });

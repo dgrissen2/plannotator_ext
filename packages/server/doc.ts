@@ -11,9 +11,11 @@
 
 import { mkdirSync } from "fs";
 import { dirname, resolve } from "path";
+import { homedir } from "os";
 import { isRemoteSession, getServerPort } from "./remote";
 import { openBrowser } from "./browser";
 import { getRepoInfo } from "./repo";
+import { validatePath } from "./security";
 
 // Re-export utilities
 export { isRemoteSession, getServerPort } from "./remote";
@@ -168,12 +170,20 @@ export async function startDocServer(
               return new Response("Missing path parameter", { status: 400 });
             }
             try {
-              const file = Bun.file(imagePath);
+              // Validate path is within allowed directories
+              const allowedBases = ["/tmp/plannotator", homedir(), baseDir];
+              const validatedPath = validatePath(imagePath, allowedBases);
+
+              const file = Bun.file(validatedPath);
               if (!(await file.exists())) {
                 return new Response("File not found", { status: 404 });
               }
               return new Response(file);
-            } catch {
+            } catch (err) {
+              const message = err instanceof Error ? err.message : "Failed to read file";
+              if (message.includes("Path not allowed")) {
+                return new Response("Access denied", { status: 403 });
+              }
               return new Response("Failed to read file", { status: 500 });
             }
           }
@@ -245,11 +255,40 @@ export async function startDocServer(
                 feedback: string;
                 annotations: unknown[];
                 agentSwitch?: string;
+                linkedDocs?: { viewed: string[]; requested: string[] };
               };
+
+              // Build enhanced feedback with status envelope
+              let enhancedFeedback = body.feedback || "";
+
+              // Add linked docs section if any
+              const linkedDocs = body.linkedDocs;
+              if (linkedDocs && (linkedDocs.viewed.length > 0 || linkedDocs.requested.length > 0)) {
+                enhancedFeedback += "\n\n---\n## Linked Documents\n";
+
+                for (const path of linkedDocs.requested) {
+                  enhancedFeedback += `- ${path} **(review requested)**\n`;
+                }
+                for (const path of linkedDocs.viewed) {
+                  if (!linkedDocs.requested.includes(path)) {
+                    enhancedFeedback += `- ${path} (viewed only)\n`;
+                  }
+                }
+
+                if (linkedDocs.requested.length > 0) {
+                  enhancedFeedback += "\nTo review requested documents, run:\n";
+                  for (const path of linkedDocs.requested) {
+                    enhancedFeedback += `\`/plannotator-doc ${path}\`\n`;
+                  }
+                }
+              }
+
+              // Add status envelope
+              enhancedFeedback += `\n---\n**Status: CHANGES REQUESTED**\nAfter applying changes, re-run: \`/plannotator-doc ${filepath}\`\n`;
 
               resolveDecision({
                 approved: false,
-                feedback: body.feedback || "",
+                feedback: enhancedFeedback,
                 annotations: body.annotations || [],
                 agentSwitch: body.agentSwitch,
               });
