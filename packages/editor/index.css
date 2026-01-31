@@ -36,29 +36,29 @@
 }
 
 .light {
-  --background: oklch(0.97 0.005 260);
-  --foreground: oklch(0.18 0.02 260);
+  --background: oklch(0.98 0.005 260);
+  --foreground: oklch(0.13 0.02 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.02 260);
+  --card-foreground: oklch(0.13 0.02 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.02 260);
-  --primary: oklch(0.50 0.25 280);
+  --popover-foreground: oklch(0.13 0.02 260);
+  --primary: oklch(0.45 0.25 280);
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.50 0.18 180);
+  --secondary: oklch(0.45 0.18 180);
   --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.92 0.01 260);
-  --muted-foreground: oklch(0.40 0.02 260);
-  --accent: oklch(0.60 0.22 50);
-  --accent-foreground: oklch(0.18 0.02 260);
-  --destructive: oklch(0.50 0.25 25);
+  --muted: oklch(0.94 0.01 260);
+  --muted-foreground: oklch(0.30 0.02 260);
+  --accent: oklch(0.55 0.22 50);
+  --accent-foreground: oklch(0.13 0.02 260);
+  --destructive: oklch(0.45 0.25 25);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.88 0.01 260);
-  --input: oklch(0.92 0.01 260);
-  --ring: oklch(0.50 0.25 280);
-  --success: oklch(0.45 0.20 150);
+  --border: oklch(0.85 0.01 260);
+  --input: oklch(0.94 0.01 260);
+  --ring: oklch(0.45 0.25 280);
+  --success: oklch(0.40 0.20 150);
   --success-foreground: oklch(1 0 0);
-  --warning: oklch(0.55 0.18 85);
-  --warning-foreground: oklch(0.18 0.02 260);
+  --warning: oklch(0.50 0.18 85);
+  --warning-foreground: oklch(0.13 0.02 260);
 }
 
 @theme inline {
@@ -146,8 +146,13 @@ pre code {
 
 /* Light mode base code - ensure readability regardless of highlighting */
 .light pre code {
-  background: oklch(0.94 0.01 260);
-  color: oklch(0.20 0.02 260);
+  background: oklch(0.92 0.01 260);
+  color: oklch(0.10 0.02 260) !important;
+}
+
+/* Force all text inside code blocks to be dark in light mode */
+.light pre code * {
+  color: oklch(0.10 0.02 260) !important;
 }
 
 /* Highlighted code blocks */
@@ -157,8 +162,12 @@ pre code.hljs {
 
 /* Light mode highlighted code - override hljs dark theme */
 .light pre code.hljs {
-  background: oklch(0.94 0.01 260) !important;
-  color: oklch(0.20 0.02 260) !important;
+  background: oklch(0.92 0.01 260) !important;
+  color: oklch(0.10 0.02 260) !important;
+}
+
+.light pre code.hljs * {
+  color: oklch(0.10 0.02 260) !important;
 }
 
 .light .hljs-keyword,

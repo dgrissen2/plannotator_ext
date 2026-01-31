@@ -15,7 +15,7 @@ import { homedir } from "os";
 import { isRemoteSession, getServerPort } from "./remote";
 import { openBrowser } from "./browser";
 import { getRepoInfo } from "./repo";
-import { validatePath } from "./security";
+import { validatePath, sanitizeFilename, isAllowedImageExtension } from "./security";
 
 // Re-export utilities
 export { isRemoteSession, getServerPort } from "./remote";
@@ -126,6 +126,15 @@ export async function startDocServer(
               // Loading a linked document
               try {
                 const resolvedPath = resolve(baseDir, requestedPath);
+
+                // SEC-1: Validate path stays within baseDir (prevent path traversal)
+                if (!resolvedPath.startsWith(baseDir + "/") && resolvedPath !== baseDir) {
+                  return Response.json(
+                    { error: "Path traversal attempt blocked" },
+                    { status: 403 }
+                  );
+                }
+
                 const file = Bun.file(resolvedPath);
 
                 if (!(await file.exists())) {
@@ -197,12 +206,26 @@ export async function startDocServer(
                 return new Response("No file provided", { status: 400 });
               }
 
-              const ext = file.name.split(".").pop() || "png";
+              // SEC-6: Enforce file size limit (10MB)
+              const MAX_FILE_SIZE = 10 * 1024 * 1024;
+              if (file.size > MAX_FILE_SIZE) {
+                return new Response("File too large (max 10MB)", { status: 413 });
+              }
+
+              // SEC-2: Validate file extension
+              if (!isAllowedImageExtension(file.name)) {
+                return new Response("File type not allowed", { status: 415 });
+              }
+
+              // SEC-7: Sanitize filename and extract extension
+              const safeFilename = sanitizeFilename(file.name);
+              const ext = safeFilename.split(".").pop() || "png";
               const tempDir = "/tmp/plannotator";
-              mkdirSync(tempDir, { recursive: true });
+              mkdirSync(tempDir, { recursive: true, mode: 0o700 });
               const tempPath = `${tempDir}/${crypto.randomUUID()}.${ext}`;
 
-              await Bun.write(tempPath, file);
+              // SEC-8: Write with restrictive permissions
+              await Bun.write(tempPath, file, { mode: 0o600 });
               return Response.json({ path: tempPath });
             } catch (err) {
               const message = err instanceof Error ? err.message : "Upload failed";

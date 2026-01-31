@@ -27,7 +27,7 @@ import {
   saveFinalSnapshot,
 } from "./storage";
 import { getRepoInfo } from "./repo";
-import { validatePath } from "./security";
+import { validatePath, sanitizeFilename, isAllowedImageExtension } from "./security";
 
 // Re-export utilities
 export { isRemoteSession, getServerPort } from "./remote";
@@ -146,8 +146,9 @@ export async function startPlannotatorServer(
               return new Response("Missing path parameter", { status: 400 });
             }
             try {
-              // Validate path is within allowed directories
-              const allowedBases = ["/tmp/plannotator", homedir()];
+              // SEC-5: Restrict allowed bases (don't allow entire homedir)
+              const cwd = process.cwd();
+              const allowedBases = ["/tmp/plannotator", cwd];
               const validatedPath = validatePath(imagePath, allowedBases);
 
               const file = Bun.file(validatedPath);
@@ -173,12 +174,26 @@ export async function startPlannotatorServer(
                 return new Response("No file provided", { status: 400 });
               }
 
-              const ext = file.name.split(".").pop() || "png";
+              // SEC-6: Enforce file size limit (10MB)
+              const MAX_FILE_SIZE = 10 * 1024 * 1024;
+              if (file.size > MAX_FILE_SIZE) {
+                return new Response("File too large (max 10MB)", { status: 413 });
+              }
+
+              // SEC-2: Validate file extension
+              if (!isAllowedImageExtension(file.name)) {
+                return new Response("File type not allowed", { status: 415 });
+              }
+
+              // SEC-7: Sanitize filename and extract extension
+              const safeFilename = sanitizeFilename(file.name);
+              const ext = safeFilename.split(".").pop() || "png";
               const tempDir = "/tmp/plannotator";
-              mkdirSync(tempDir, { recursive: true });
+              mkdirSync(tempDir, { recursive: true, mode: 0o700 });
               const tempPath = `${tempDir}/${crypto.randomUUID()}.${ext}`;
 
-              await Bun.write(tempPath, file);
+              // SEC-8: Write with restrictive permissions
+              await Bun.write(tempPath, file, { mode: 0o600 });
               return Response.json({ path: tempPath });
             } catch (err) {
               const message =

@@ -397,6 +397,11 @@ const App: React.FC = () => {
   // Listen for messages from child windows (linked doc tracking)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      // SEC-4: Validate message origin - only accept from same origin
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+
       if (event.data?.type === 'requestReview' && event.data?.path) {
         const path = event.data.path;
         setLinkedDocsRequested(prev => [...new Set([...prev, path])]);
@@ -929,8 +934,8 @@ const App: React.FC = () => {
               <button
                 onClick={() => {
                   if (docFilepath) {
-                    // Track this as a review request and notify parent window
-                    window.opener?.postMessage({ type: 'requestReview', path: docFilepath }, '*');
+                    // SEC-3: Track this as a review request and notify parent window with specific origin
+                    window.opener?.postMessage({ type: 'requestReview', path: docFilepath }, window.location.origin);
                   }
                 }}
                 className="px-3 py-1.5 text-sm bg-primary hover:bg-primary/90 text-primary-foreground rounded transition-colors flex items-center gap-1.5"
