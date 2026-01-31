@@ -50,8 +50,11 @@ if [ ! -d "node_modules" ]; then
     bun install
 fi
 
-# Build the UI first
-echo "Building UI..."
+# Build the UI (review must be built before hook, since hook copies review's output)
+echo "Building review UI..."
+bun run build:review
+
+echo "Building hook UI..."
 bun run build:hook
 
 # Ensure install directory exists
