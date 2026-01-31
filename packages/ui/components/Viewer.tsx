@@ -40,7 +40,7 @@ interface ViewerProps {
   markdown: string;
   frontmatter?: Frontmatter | null;
   annotations: Annotation[];
-  onAddAnnotation: (ann: Annotation) => void;
+  onAddAnnotation?: (ann: Annotation) => void;
   onSelectAnnotation: (id: string | null) => void;
   selectedAnnotationId: string | null;
   mode: EditorMode;
@@ -49,6 +49,7 @@ interface ViewerProps {
   onAddGlobalAttachment?: (path: string) => void;
   onRemoveGlobalAttachment?: (path: string) => void;
   repoInfo?: { display: string; branch?: string } | null;
+  isReadOnly?: boolean;
 }
 
 export interface ViewerHandle {
@@ -104,6 +105,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
   onAddGlobalAttachment,
   onRemoveGlobalAttachment,
   repoInfo,
+  isReadOnly = false,
 }, ref) => {
   const [copied, setCopied] = useState(false);
   const [showGlobalCommentInput, setShowGlobalCommentInput] = useState(false);
@@ -121,7 +123,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
   };
 
   const handleAddGlobalComment = () => {
-    if (!globalCommentValue.trim()) return;
+    if (!globalCommentValue.trim() || !onAddAnnotation) return;
 
     const newAnnotation: Annotation = {
       id: `global-${Date.now()}`,
@@ -244,7 +246,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
       highlighter.addClass('comment', source.id);
     }
 
-    onAddAnnotationRef.current(newAnnotation);
+    onAddAnnotationRef.current?.(newAnnotation);
   };
 
   // Helper to find text in DOM and create a range
@@ -610,7 +612,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
       imagePaths,
     };
 
-    onAddAnnotationRef.current(newAnnotation);
+    onAddAnnotationRef.current?.(newAnnotation);
 
     // Clear selection
     selection?.removeAllRanges();
@@ -873,17 +875,42 @@ const InlineMarkdown: React.FC<{ text: string }> = ({ text }) => {
     // Links: [text](url)
     match = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
     if (match) {
-      parts.push(
-        <a
-          key={key++}
-          href={match[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary underline underline-offset-2 hover:text-primary/80"
-        >
-          {match[1]}
-        </a>
-      );
+      const linkText = match[1];
+      const linkUrl = match[2];
+      const isMarkdownLink = /\.md$/i.test(linkUrl) || /\.markdown$/i.test(linkUrl);
+
+      if (isMarkdownLink && !linkUrl.startsWith('http://') && !linkUrl.startsWith('https://')) {
+        // Local markdown link - open in read-only preview mode
+        parts.push(
+          <a
+            key={key++}
+            href={`/?doc=${encodeURIComponent(linkUrl)}&readonly=true`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline underline-offset-2 hover:text-primary/80 inline-flex items-center gap-1"
+            title={`Preview: ${linkUrl}`}
+          >
+            {linkText}
+            <svg className="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+          </a>
+        );
+      } else {
+        // Regular external link
+        parts.push(
+          <a
+            key={key++}
+            href={linkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline underline-offset-2 hover:text-primary/80"
+          >
+            {linkText}
+          </a>
+        );
+      }
       remaining = remaining.slice(match[0].length);
       continue;
     }

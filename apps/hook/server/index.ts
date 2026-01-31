@@ -1,7 +1,7 @@
 /**
  * Plannotator CLI for Claude Code
  *
- * Supports two modes:
+ * Supports three modes:
  *
  * 1. Plan Review (default, no args):
  *    - Spawned by ExitPlanMode hook
@@ -9,8 +9,13 @@
  *    - Serves UI, returns approve/deny decision to stdout
  *
  * 2. Code Review (`plannotator review`):
- *    - Triggered by /review slash command
+ *    - Triggered by /plannotator-review slash command
  *    - Runs git diff, opens review UI
+ *    - Outputs feedback to stdout (captured by slash command)
+ *
+ * 3. Document Review (`plannotator doc <filepath>`):
+ *    - Triggered by /plannotator-doc slash command
+ *    - Opens any markdown file for annotation
  *    - Outputs feedback to stdout (captured by slash command)
  *
  * Environment variables:
@@ -26,6 +31,10 @@ import {
   startReviewServer,
   handleReviewServerReady,
 } from "@plannotator/server/review";
+import {
+  startDocServer,
+  handleDocServerReady,
+} from "@plannotator/server/doc";
 import { getGitContext, runGitDiff } from "@plannotator/server/git";
 
 // Embed the built HTML at compile time
@@ -70,6 +79,49 @@ if (args[0] === "review") {
   });
 
   // Wait for user feedback
+  const result = await server.waitForDecision();
+
+  // Give browser time to receive response and update UI
+  await Bun.sleep(1500);
+
+  // Cleanup
+  server.stop();
+
+  // Output feedback (captured by slash command)
+  console.log(result.feedback || "No feedback provided.");
+  process.exit(0);
+
+} else if (args[0] === "doc") {
+  // ============================================
+  // DOCUMENT REVIEW MODE
+  // ============================================
+
+  const filepath = args[1];
+  if (!filepath) {
+    console.error("Usage: plannotator doc <filepath>");
+    process.exit(1);
+  }
+
+  // Read the markdown file
+  const file = Bun.file(filepath);
+  if (!(await file.exists())) {
+    console.error(`File not found: ${filepath}`);
+    process.exit(1);
+  }
+
+  const markdown = await file.text();
+
+  // Start doc review server
+  const server = await startDocServer({
+    markdown,
+    filepath,
+    origin: "claude-code",
+    sharingEnabled,
+    htmlContent: planHtmlContent, // Reuse plan UI
+    onReady: handleDocServerReady,
+  });
+
+  // Wait for user decision (approve or feedback)
   const result = await server.waitForDecision();
 
   // Give browser time to receive response and update UI

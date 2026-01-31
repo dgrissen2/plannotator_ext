@@ -348,6 +348,9 @@ const App: React.FC = () => {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('bypassPermissions');
   const [sharingEnabled, setSharingEnabled] = useState(true);
   const [repoInfo, setRepoInfo] = useState<{ display: string; branch?: string } | null>(null);
+  const [isDocMode, setIsDocMode] = useState(false);
+  const [docFilepath, setDocFilepath] = useState<string | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const viewerRef = useRef<ViewerHandle>(null);
 
   // URL-based sharing
@@ -400,35 +403,95 @@ const App: React.FC = () => {
     if (isLoadingShared) return; // Wait for share check to complete
     if (isSharedSession) return; // Already loaded from share
 
-    fetch('/api/plan')
-      .then(res => {
-        if (!res.ok) throw new Error('Not in API mode');
-        return res.json();
-      })
-      .then((data: { plan: string; origin?: 'claude-code' | 'opencode'; sharingEnabled?: boolean; repoInfo?: { display: string; branch?: string } }) => {
-        setMarkdown(data.plan);
-        setIsApiMode(true);
-        if (data.sharingEnabled !== undefined) {
-          setSharingEnabled(data.sharingEnabled);
-        }
-        if (data.repoInfo) {
-          setRepoInfo(data.repoInfo);
-        }
-        if (data.origin) {
-          setOrigin(data.origin);
-          // For Claude Code, check if user needs to configure permission mode
-          if (data.origin === 'claude-code' && needsPermissionModeSetup()) {
-            setShowPermissionModeSetup(true);
+    // Check for doc mode query params (linked document)
+    const urlParams = new URLSearchParams(window.location.search);
+    const docPath = urlParams.get('doc');
+    const readOnly = urlParams.get('readonly') === 'true';
+
+    // Try /api/plan first, then fall back to /api/doc
+    const fetchContent = async () => {
+      // If doc query param, fetch that specific document
+      if (docPath) {
+        const docUrl = `/api/doc?path=${encodeURIComponent(docPath)}${readOnly ? '&readonly=true' : ''}`;
+        const res = await fetch(docUrl);
+        if (res.ok) {
+          const data = await res.json();
+          setMarkdown(data.markdown);
+          setIsApiMode(true);
+          setIsDocMode(true);
+          setDocFilepath(data.filepath);
+          setIsReadOnly(data.readOnly || readOnly);
+          if (data.sharingEnabled !== undefined) {
+            setSharingEnabled(data.sharingEnabled);
           }
-          // Load saved permission mode preference
-          setPermissionMode(getPermissionModeSettings().mode);
+          if (data.repoInfo) {
+            setRepoInfo(data.repoInfo);
+          }
+          if (data.origin) {
+            setOrigin(data.origin);
+          }
+          return;
         }
-      })
-      .catch(() => {
-        // Not in API mode - use default content
-        setIsApiMode(false);
-      })
-      .finally(() => setIsLoading(false));
+      }
+
+      // Try /api/plan (standard plan review mode)
+      try {
+        const res = await fetch('/api/plan');
+        if (res.ok) {
+          const data = await res.json();
+          setMarkdown(data.plan);
+          setIsApiMode(true);
+          if (data.sharingEnabled !== undefined) {
+            setSharingEnabled(data.sharingEnabled);
+          }
+          if (data.repoInfo) {
+            setRepoInfo(data.repoInfo);
+          }
+          if (data.origin) {
+            setOrigin(data.origin);
+            // For Claude Code, check if user needs to configure permission mode
+            if (data.origin === 'claude-code' && needsPermissionModeSetup()) {
+              setShowPermissionModeSetup(true);
+            }
+            // Load saved permission mode preference
+            setPermissionMode(getPermissionModeSettings().mode);
+          }
+          return;
+        }
+      } catch {
+        // Plan endpoint failed
+      }
+
+      // Try /api/doc (document review mode - main document)
+      try {
+        const res = await fetch('/api/doc');
+        if (res.ok) {
+          const data = await res.json();
+          setMarkdown(data.markdown);
+          setIsApiMode(true);
+          setIsDocMode(true);
+          setDocFilepath(data.filepath);
+          setIsReadOnly(data.readOnly || false);
+          if (data.sharingEnabled !== undefined) {
+            setSharingEnabled(data.sharingEnabled);
+          }
+          if (data.repoInfo) {
+            setRepoInfo(data.repoInfo);
+          }
+          if (data.origin) {
+            setOrigin(data.origin);
+          }
+          return;
+        }
+      } catch {
+        // Doc endpoint failed
+      }
+
+      // Not in API mode - use default content
+      setIsApiMode(false);
+    };
+
+    fetchContent().finally(() => setIsLoading(false));
   }, [isLoadingShared, isSharedSession]);
 
   useEffect(() => {
@@ -554,16 +617,33 @@ const App: React.FC = () => {
     setIsSubmitting(true);
     try {
       const planSaveSettings = getPlanSaveSettings();
-      await fetch('/api/deny', {
+      const agentSwitchSettings = getAgentSwitchSettings();
+
+      // Doc mode uses /api/feedback, plan mode uses /api/deny
+      const endpoint = isDocMode ? '/api/feedback' : '/api/deny';
+      const body: Record<string, unknown> = {
+        feedback: diffOutput,
+        annotations: annotations,
+      };
+
+      // Include plan save settings for plan mode
+      if (!isDocMode) {
+        body.planSave = {
+          enabled: planSaveSettings.enabled,
+          ...(planSaveSettings.customPath && { customPath: planSaveSettings.customPath }),
+        };
+      }
+
+      // Include agent switch for OpenCode
+      const effectiveAgent = getEffectiveAgentName(agentSwitchSettings);
+      if (effectiveAgent) {
+        body.agentSwitch = effectiveAgent;
+      }
+
+      await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          feedback: diffOutput,
-          planSave: {
-            enabled: planSaveSettings.enabled,
-            ...(planSaveSettings.customPath && { customPath: planSaveSettings.customPath }),
-          },
-        })
+        body: JSON.stringify(body),
       });
       setSubmitted('denied');
     } catch {
@@ -695,7 +775,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1 md:gap-2">
-            {isApiMode && (
+            {isApiMode && !isReadOnly && (
               <>
                 <button
                   onClick={() => {
@@ -794,15 +874,45 @@ const App: React.FC = () => {
           </div>
         </header>
 
+        {/* Read-only banner for linked documents */}
+        {isReadOnly && (
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-amber-200">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              <span>Read-only preview</span>
+              {docFilepath && (
+                <span className="text-amber-200/60 font-mono text-xs truncate max-w-md">{docFilepath}</span>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                const cmd = `/plannotator-doc ${docFilepath}`;
+                navigator.clipboard.writeText(cmd);
+              }}
+              className="px-2 py-1 text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 rounded transition-colors flex items-center gap-1.5"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              Copy command to annotate
+            </button>
+          </div>
+        )}
+
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Document Area */}
           <main className="flex-1 overflow-y-auto bg-grid">
             <div className="min-h-full flex flex-col items-center px-4 py-3 md:px-10 md:py-8 xl:px-16">
-              {/* Mode Switcher */}
-              <div className="w-full max-w-[832px] 2xl:max-w-5xl mb-3 md:mb-4 flex justify-start">
-                <ModeSwitcher mode={editorMode} onChange={setEditorMode} taterMode={taterMode} />
-              </div>
+              {/* Mode Switcher (hidden in read-only mode) */}
+              {!isReadOnly && (
+                <div className="w-full max-w-[832px] 2xl:max-w-5xl mb-3 md:mb-4 flex justify-start">
+                  <ModeSwitcher mode={editorMode} onChange={setEditorMode} taterMode={taterMode} />
+                </div>
+              )}
 
               <Viewer
                 ref={viewerRef}
@@ -810,15 +920,16 @@ const App: React.FC = () => {
                 markdown={markdown}
                 frontmatter={frontmatter}
                 annotations={annotations}
-                onAddAnnotation={handleAddAnnotation}
+                onAddAnnotation={isReadOnly ? undefined : handleAddAnnotation}
                 onSelectAnnotation={setSelectedAnnotationId}
                 selectedAnnotationId={selectedAnnotationId}
-                mode={editorMode}
+                mode={isReadOnly ? 'selection' : editorMode}
                 taterMode={taterMode}
                 globalAttachments={globalAttachments}
-                onAddGlobalAttachment={handleAddGlobalAttachment}
-                onRemoveGlobalAttachment={handleRemoveGlobalAttachment}
+                onAddGlobalAttachment={isReadOnly ? undefined : handleAddGlobalAttachment}
+                onRemoveGlobalAttachment={isReadOnly ? undefined : handleRemoveGlobalAttachment}
                 repoInfo={repoInfo}
+                isReadOnly={isReadOnly}
               />
             </div>
           </main>
@@ -928,12 +1039,18 @@ const App: React.FC = () => {
 
               <div className="space-y-2">
                 <h2 className="text-xl font-semibold text-foreground">
-                  {submitted === 'approved' ? 'Plan Approved' : 'Feedback Sent'}
+                  {submitted === 'approved'
+                    ? (isDocMode ? 'Document Approved' : 'Plan Approved')
+                    : 'Feedback Sent'}
                 </h2>
                 <p className="text-muted-foreground">
                   {submitted === 'approved'
-                    ? `${agentName} will proceed with the implementation.`
-                    : `${agentName} will revise the plan based on your annotations.`}
+                    ? (isDocMode
+                        ? `No changes needed. ${agentName} can proceed.`
+                        : `${agentName} will proceed with the implementation.`)
+                    : (isDocMode
+                        ? `${agentName} will update the document based on your annotations.`
+                        : `${agentName} will revise the plan based on your annotations.`)}
                 </p>
               </div>
 

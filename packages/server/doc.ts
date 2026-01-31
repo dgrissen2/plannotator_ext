@@ -1,0 +1,321 @@
+/**
+ * Document Review Server
+ *
+ * Provides a server implementation for reviewing and annotating arbitrary markdown files.
+ * Follows the same patterns as the plan and review servers.
+ *
+ * Environment variables:
+ *   PLANNOTATOR_REMOTE - Set to "1" or "true" for remote/devcontainer mode
+ *   PLANNOTATOR_PORT   - Fixed port to use (default: random locally, 19432 for remote)
+ */
+
+import { mkdirSync } from "fs";
+import { dirname, resolve } from "path";
+import { isRemoteSession, getServerPort } from "./remote";
+import { openBrowser } from "./browser";
+import { getRepoInfo } from "./repo";
+
+// Re-export utilities
+export { isRemoteSession, getServerPort } from "./remote";
+export { openBrowser } from "./browser";
+
+// --- Types ---
+
+export interface DocServerOptions {
+  /** The markdown content to review */
+  markdown: string;
+  /** The file path being reviewed (for display and relative link resolution) */
+  filepath: string;
+  /** HTML content to serve for the UI */
+  htmlContent: string;
+  /** Origin identifier for UI customization */
+  origin?: "opencode" | "claude-code";
+  /** Whether URL sharing is enabled (default: true) */
+  sharingEnabled?: boolean;
+  /** Called when server starts with the URL, remote status, and port */
+  onReady?: (url: string, isRemote: boolean, port: number) => void;
+  /** OpenCode client for querying available agents (OpenCode only) */
+  opencodeClient?: {
+    app: {
+      agents: (options?: object) => Promise<{ data?: Array<{ name: string; description?: string; mode: string; hidden?: boolean }> }>;
+    };
+  };
+}
+
+export interface DocServerResult {
+  /** The port the server is running on */
+  port: number;
+  /** The full URL to access the server */
+  url: string;
+  /** Whether running in remote mode */
+  isRemote: boolean;
+  /** Wait for user decision (approve or feedback) */
+  waitForDecision: () => Promise<{
+    approved: boolean;
+    feedback?: string;
+    annotations?: unknown[];
+    agentSwitch?: string;
+  }>;
+  /** Stop the server */
+  stop: () => void;
+}
+
+// --- Server Implementation ---
+
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 500;
+
+/**
+ * Start the Document Review server
+ *
+ * Handles:
+ * - Remote detection and port configuration
+ * - API routes (/api/doc, /api/feedback, /api/approve)
+ * - Linked document loading (read-only)
+ * - Port conflict retries
+ */
+export async function startDocServer(
+  options: DocServerOptions
+): Promise<DocServerResult> {
+  const { markdown, filepath, htmlContent, origin, sharingEnabled = true, onReady } = options;
+
+  const isRemote = isRemoteSession();
+  const configuredPort = getServerPort();
+
+  // Detect repo info (cached for this session)
+  const repoInfo = await getRepoInfo();
+
+  // Base directory for resolving relative paths
+  const baseDir = dirname(resolve(filepath));
+
+  // Decision promise
+  let resolveDecision: (result: {
+    approved: boolean;
+    feedback?: string;
+    annotations?: unknown[];
+    agentSwitch?: string;
+  }) => void;
+  const decisionPromise = new Promise<{
+    approved: boolean;
+    feedback?: string;
+    annotations?: unknown[];
+    agentSwitch?: string;
+  }>((resolve) => {
+    resolveDecision = resolve;
+  });
+
+  // Start server with retry logic
+  let server: ReturnType<typeof Bun.serve> | null = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      server = Bun.serve({
+        port: configuredPort,
+
+        async fetch(req) {
+          const url = new URL(req.url);
+
+          // API: Get document content (main or linked)
+          if (url.pathname === "/api/doc" && req.method === "GET") {
+            const requestedPath = url.searchParams.get("path");
+            const readOnly = url.searchParams.get("readonly") === "true";
+
+            if (requestedPath) {
+              // Loading a linked document
+              try {
+                const resolvedPath = resolve(baseDir, requestedPath);
+                const file = Bun.file(resolvedPath);
+
+                if (!(await file.exists())) {
+                  return Response.json(
+                    { error: `File not found: ${requestedPath}` },
+                    { status: 404 }
+                  );
+                }
+
+                const content = await file.text();
+                return Response.json({
+                  markdown: content,
+                  filepath: resolvedPath,
+                  origin,
+                  isMain: false,
+                  readOnly: true, // Linked docs are always read-only (MVP)
+                  sharingEnabled,
+                  repoInfo,
+                });
+              } catch (err) {
+                const message = err instanceof Error ? err.message : "Failed to load file";
+                return Response.json({ error: message }, { status: 500 });
+              }
+            }
+
+            // Main document
+            return Response.json({
+              markdown,
+              filepath,
+              origin,
+              isMain: true,
+              readOnly: readOnly,
+              sharingEnabled,
+              repoInfo,
+            });
+          }
+
+          // API: Serve images (local paths or temp uploads)
+          if (url.pathname === "/api/image") {
+            const imagePath = url.searchParams.get("path");
+            if (!imagePath) {
+              return new Response("Missing path parameter", { status: 400 });
+            }
+            try {
+              const file = Bun.file(imagePath);
+              if (!(await file.exists())) {
+                return new Response("File not found", { status: 404 });
+              }
+              return new Response(file);
+            } catch {
+              return new Response("Failed to read file", { status: 500 });
+            }
+          }
+
+          // API: Upload image -> save to temp -> return path
+          if (url.pathname === "/api/upload" && req.method === "POST") {
+            try {
+              const formData = await req.formData();
+              const file = formData.get("file") as File;
+              if (!file) {
+                return new Response("No file provided", { status: 400 });
+              }
+
+              const ext = file.name.split(".").pop() || "png";
+              const tempDir = "/tmp/plannotator";
+              mkdirSync(tempDir, { recursive: true });
+              const tempPath = `${tempDir}/${crypto.randomUUID()}.${ext}`;
+
+              await Bun.write(tempPath, file);
+              return Response.json({ path: tempPath });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : "Upload failed";
+              return Response.json({ error: message }, { status: 500 });
+            }
+          }
+
+          // API: Get available agents (OpenCode only)
+          if (url.pathname === "/api/agents") {
+            if (!options.opencodeClient) {
+              return Response.json({ agents: [] });
+            }
+
+            try {
+              const result = await options.opencodeClient.app.agents({});
+              const agents = (result.data ?? [])
+                .filter((a) => a.mode === "primary" && !a.hidden)
+                .map((a) => ({ id: a.name, name: a.name, description: a.description }));
+
+              return Response.json({ agents });
+            } catch {
+              return Response.json({ agents: [], error: "Failed to fetch agents" });
+            }
+          }
+
+          // API: Approve document (no changes needed)
+          if (url.pathname === "/api/approve" && req.method === "POST") {
+            try {
+              const body = (await req.json().catch(() => ({}))) as {
+                agentSwitch?: string;
+              };
+
+              resolveDecision({
+                approved: true,
+                feedback: "LGTM - no changes needed",
+                agentSwitch: body.agentSwitch,
+              });
+
+              return Response.json({ ok: true });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : "Failed to process approval";
+              return Response.json({ error: message }, { status: 500 });
+            }
+          }
+
+          // API: Submit feedback with annotations
+          if (url.pathname === "/api/feedback" && req.method === "POST") {
+            try {
+              const body = (await req.json()) as {
+                feedback: string;
+                annotations: unknown[];
+                agentSwitch?: string;
+              };
+
+              resolveDecision({
+                approved: false,
+                feedback: body.feedback || "",
+                annotations: body.annotations || [],
+                agentSwitch: body.agentSwitch,
+              });
+
+              return Response.json({ ok: true });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : "Failed to process feedback";
+              return Response.json({ error: message }, { status: 500 });
+            }
+          }
+
+          // Serve embedded HTML for all other routes (SPA)
+          return new Response(htmlContent, {
+            headers: { "Content-Type": "text/html" },
+          });
+        },
+      });
+
+      break; // Success, exit retry loop
+    } catch (err: unknown) {
+      const isAddressInUse =
+        err instanceof Error && err.message.includes("EADDRINUSE");
+
+      if (isAddressInUse && attempt < MAX_RETRIES) {
+        await Bun.sleep(RETRY_DELAY_MS);
+        continue;
+      }
+
+      if (isAddressInUse) {
+        const hint = isRemote ? " (set PLANNOTATOR_PORT to use different port)" : "";
+        throw new Error(`Port ${configuredPort} in use after ${MAX_RETRIES} retries${hint}`);
+      }
+
+      throw err;
+    }
+  }
+
+  if (!server) {
+    throw new Error("Failed to start server");
+  }
+
+  const serverUrl = `http://localhost:${server.port}`;
+
+  // Notify caller that server is ready
+  if (onReady) {
+    onReady(serverUrl, isRemote, server.port);
+  }
+
+  return {
+    port: server.port,
+    url: serverUrl,
+    isRemote,
+    waitForDecision: () => decisionPromise,
+    stop: () => server.stop(),
+  };
+}
+
+/**
+ * Default behavior: open browser for local sessions
+ */
+export async function handleDocServerReady(
+  url: string,
+  isRemote: boolean,
+  _port: number
+): Promise<void> {
+  if (!isRemote) {
+    await openBrowser(url);
+  }
+}
