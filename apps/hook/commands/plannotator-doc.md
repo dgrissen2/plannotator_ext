@@ -15,7 +15,7 @@ argument-hint: <filepath>
 
 **If output contains feedback:**
 1. Apply ALL requested changes to the document
-2. After changes complete, re-run: `plannotator doc $ARGUMENTS`
+2. After changes complete, re-run: !`plannotator doc $ARGUMENTS`
 3. Wait for next review cycle
 
 **MANDATORY**: After making ANY changes, you MUST re-run the command above.

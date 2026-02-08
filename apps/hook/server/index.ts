@@ -36,6 +36,42 @@ import {
   handleDocServerReady,
 } from "@plannotator/server/doc";
 import { getGitContext, runGitDiff } from "@plannotator/server/git";
+import { readdirSync, statSync, readFileSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
+
+/**
+ * Scan ~/.claude/plans/ for the most recently modified .md file.
+ * Returns its content, or null if the directory is missing, empty,
+ * or the newest file is older than 5 minutes (stale).
+ */
+function findLatestClaudePlan(): string | null {
+  try {
+    const plansDir = join(homedir(), ".claude", "plans");
+    const entries = readdirSync(plansDir).filter((f) => f.endsWith(".md"));
+    if (entries.length === 0) return null;
+
+    let latestPath = "";
+    let latestMtime = 0;
+    for (const entry of entries) {
+      const fullPath = join(plansDir, entry);
+      const mtime = statSync(fullPath).mtimeMs;
+      if (mtime > latestMtime) {
+        latestMtime = mtime;
+        latestPath = fullPath;
+      }
+    }
+
+    // Staleness check: reject files older than 5 minutes
+    const ageMs = Date.now() - latestMtime;
+    if (ageMs > 5 * 60 * 1000) return null;
+
+    const content = readFileSync(latestPath, "utf-8").trim();
+    return content || null;
+  } catch {
+    return null;
+  }
+}
 
 // Embed the built HTML at compile time
 // @ts-ignore - Bun import attribute for text
@@ -157,8 +193,13 @@ if (args[0] === "review") {
     process.exit(1);
   }
 
+  // Fallback: read latest plan from ~/.claude/plans/ if tool_input had no plan
   if (!planContent) {
-    console.error("No plan content in hook event");
+    planContent = findLatestClaudePlan() || "";
+  }
+
+  if (!planContent) {
+    console.error("No plan content in hook event or ~/.claude/plans/");
     process.exit(1);
   }
 
