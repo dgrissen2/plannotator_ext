@@ -37,6 +37,7 @@ import {
 } from "@plannotator/server/annotate";
 import { getGitContext, runGitDiff } from "@plannotator/server/git";
 import { writeRemoteShareLink } from "@plannotator/server/share-url";
+import { resolveMarkdownFile } from "@plannotator/server/resolve-file";
 
 // Embed the built HTML at compile time
 // @ts-ignore - Bun import attribute for text
@@ -117,17 +118,25 @@ if (args[0] === "review") {
     process.exit(1);
   }
 
-  // Resolve to absolute path
-  const path = await import("path");
-  const absolutePath = path.resolve(filePath);
+  // Smart file resolution: exact path, case-insensitive relative, or bare filename search
+  const projectRoot = process.cwd();
+  const resolved = await resolveMarkdownFile(filePath, projectRoot);
 
-  // Read the markdown file
-  const file = Bun.file(absolutePath);
-  if (!(await file.exists())) {
-    console.error(`File not found: ${absolutePath}`);
+  if (resolved.kind === "ambiguous") {
+    console.error(`Ambiguous filename "${resolved.input}" — found ${resolved.matches.length} matches:`);
+    for (const match of resolved.matches) {
+      console.error(`  ${match}`);
+    }
     process.exit(1);
   }
-  const markdown = await file.text();
+  if (resolved.kind === "not_found") {
+    console.error(`File not found: ${resolved.input}`);
+    process.exit(1);
+  }
+
+  const absolutePath = resolved.path;
+  console.error(`Resolved: ${absolutePath}`);
+  const markdown = await Bun.file(absolutePath).text();
 
   // Start the annotate server (reuses plan editor HTML)
   const server = await startAnnotateServer({
