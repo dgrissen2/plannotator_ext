@@ -112,14 +112,26 @@ if (args[0] === "review") {
   // ANNOTATE MODE
   // ============================================
 
-  const filePath = args[1];
+  let filePath = args[1];
   if (!filePath) {
     console.error("Usage: plannotator annotate <file.md>");
     process.exit(1);
   }
 
+  // Strip @ prefix if present (Claude Code file reference syntax)
+  if (filePath.startsWith("@")) {
+    filePath = filePath.slice(1);
+  }
+
+  // Use PLANNOTATOR_CWD if set (original working directory before script cd'd)
+  const projectRoot = process.env.PLANNOTATOR_CWD || process.cwd();
+
+  if (process.env.PLANNOTATOR_DEBUG) {
+    console.error(`[DEBUG] Project root: ${projectRoot}`);
+    console.error(`[DEBUG] File path arg: ${filePath}`);
+  }
+
   // Smart file resolution: exact path, case-insensitive relative, or bare filename search
-  const projectRoot = process.cwd();
   const resolved = await resolveMarkdownFile(filePath, projectRoot);
 
   if (resolved.kind === "ambiguous") {

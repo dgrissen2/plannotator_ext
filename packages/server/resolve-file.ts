@@ -38,7 +38,7 @@ export async function resolveMarkdownFile(
   projectRoot: string,
 ): Promise<ResolveResult> {
   // Restrict to markdown files
-  if (!/\.(?:md|mdx|markdown)$/i.test(input)) {
+  if (!/\.mdx?$/i.test(input)) {
     return { kind: "not_found", input };
   }
 
@@ -67,8 +67,7 @@ export async function resolveMarkdownFile(
   const inputLower = input.toLowerCase();
   const isBareFilename = !input.includes("/");
 
-  // For bare filenames, glob **/<filename>; for paths with dirs, glob the full pattern
-  const pattern = isBareFilename ? `**/${input}` : `**/${input}`;
+  const pattern = isBareFilename ? `**/${input}` : `${input}`;
   const glob = new Bun.Glob(pattern);
   const matches: string[] = [];
 
