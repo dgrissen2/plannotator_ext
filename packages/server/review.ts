@@ -10,7 +10,7 @@
  */
 
 import { isRemoteSession, getServerPort } from "./remote";
-import { type DiffType, type GitContext, runGitDiff, getFileContentsForDiff } from "./git";
+import { type DiffType, type GitContext, runGitDiff, getFileContentsForDiff, gitAddFile, gitResetFile, parseWorktreeDiffType, validateFilePath } from "./git";
 import { getRepoInfo } from "./repo";
 import { handleImage, handleUpload, handleAgents, handleServerReady, handleDraftSave, handleDraftLoad, handleDraftDelete, type OpencodeClient } from "./shared-handlers";
 import { contentHash, deleteDraft } from "./draft";
@@ -182,12 +182,14 @@ export async function startReviewServer(
             if (!filePath) {
               return Response.json({ error: "Missing path" }, { status: 400 });
             }
-            if (filePath.includes("..") || filePath.startsWith("/")) {
+            try { validateFilePath(filePath); } catch {
               return Response.json({ error: "Invalid path" }, { status: 400 });
             }
             const oldPath = url.searchParams.get("oldPath") || undefined;
-            if (oldPath && (oldPath.includes("..") || oldPath.startsWith("/"))) {
-              return Response.json({ error: "Invalid path" }, { status: 400 });
+            if (oldPath) {
+              try { validateFilePath(oldPath); } catch {
+                return Response.json({ error: "Invalid path" }, { status: 400 });
+              }
             }
             const defaultBranch = gitContext?.defaultBranch || "main";
             const result = await getFileContentsForDiff(
@@ -197,6 +199,34 @@ export async function startReviewServer(
               oldPath,
             );
             return Response.json(result);
+          }
+
+          // API: Git add / reset (stage / unstage) a file
+          if (url.pathname === "/api/git-add" && req.method === "POST") {
+            try {
+              const body = (await req.json()) as { filePath: string; undo?: boolean };
+              if (!body.filePath) {
+                return Response.json({ error: "Missing filePath" }, { status: 400 });
+              }
+
+              // Determine cwd for worktree support
+              let cwd: string | undefined;
+              if (currentDiffType.startsWith("worktree:")) {
+                const parsed = parseWorktreeDiffType(currentDiffType);
+                if (parsed) cwd = parsed.path;
+              }
+
+              if (body.undo) {
+                await gitResetFile(body.filePath, cwd);
+              } else {
+                await gitAddFile(body.filePath, cwd);
+              }
+
+              return Response.json({ ok: true });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : "Failed to git add";
+              return Response.json({ error: message }, { status: 500 });
+            }
           }
 
           // API: Serve images (local paths or temp uploads)

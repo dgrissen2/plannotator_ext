@@ -25,6 +25,11 @@ interface DiffViewerProps {
   onDeleteAnnotation: (id: string) => void;
   isViewed?: boolean;
   onToggleViewed?: () => void;
+  isStaged?: boolean;
+  isStaging?: boolean;
+  onStage?: () => void;
+  canStage?: boolean;
+  stageError?: string | null;
 }
 
 export const DiffViewer: React.FC<DiffViewerProps> = ({
@@ -42,6 +47,11 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   onDeleteAnnotation,
   isViewed = false,
   onToggleViewed,
+  isStaged = false,
+  isStaging = false,
+  onStage,
+  canStage = false,
+  stageError,
 }) => {
   const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -180,6 +190,11 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
         patch={patch}
         isViewed={isViewed}
         onToggleViewed={onToggleViewed}
+        isStaged={isStaged}
+        isStaging={isStaging}
+        onStage={onStage}
+        canStage={canStage}
+        stageError={stageError}
       />
 
       <div className="p-4">

@@ -11,6 +11,7 @@ interface FileTreeNodeProps {
   onToggleViewed?: (filePath: string) => void;
   hideViewedFiles: boolean;
   getAnnotationCount: (filePath: string) => number;
+  stagedFiles?: Set<string>;
 }
 
 function hasVisibleChildren(
@@ -40,6 +41,7 @@ export const FileTreeNodeItem: React.FC<FileTreeNodeProps> = ({
   onToggleViewed,
   hideViewedFiles,
   getAnnotationCount,
+  stagedFiles,
 }) => {
   const paddingLeft = 8 + node.depth * 12;
 
@@ -86,6 +88,7 @@ export const FileTreeNodeItem: React.FC<FileTreeNodeProps> = ({
             onToggleViewed={onToggleViewed}
             hideViewedFiles={hideViewedFiles}
             getAnnotationCount={getAnnotationCount}
+            stagedFiles={stagedFiles}
           />
         ))}
       </>
@@ -95,6 +98,7 @@ export const FileTreeNodeItem: React.FC<FileTreeNodeProps> = ({
   // File node
   const isActive = node.fileIndex === activeFileIndex;
   const isViewed = viewedFiles.has(node.path);
+  const isStaged = stagedFiles?.has(node.path) ?? false;
   const annotationCount = getAnnotationCount(node.path);
 
   if (hideViewedFiles && isViewed && !isActive) {
@@ -104,7 +108,7 @@ export const FileTreeNodeItem: React.FC<FileTreeNodeProps> = ({
   return (
     <button
       onClick={() => onSelectFile(node.fileIndex!)}
-      className={`file-tree-item w-full text-left group ${isActive ? 'active' : ''} ${annotationCount > 0 ? 'has-annotations' : ''}`}
+      className={`file-tree-item w-full text-left group ${isActive ? 'active' : ''} ${annotationCount > 0 ? 'has-annotations' : ''} ${isStaged ? 'staged' : ''}`}
       style={{ paddingLeft: paddingLeft + 15 }}
     >
       <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -130,6 +134,9 @@ export const FileTreeNodeItem: React.FC<FileTreeNodeProps> = ({
         <span className="truncate">{node.name}</span>
       </div>
       <div className="flex items-center gap-1.5 flex-shrink-0 text-[10px]">
+        {isStaged && (
+          <span className="text-primary font-medium" title="Staged (git add)">+</span>
+        )}
         {annotationCount > 0 && (
           <span className="text-primary font-medium">{annotationCount}</span>
         )}

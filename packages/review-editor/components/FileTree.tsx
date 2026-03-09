@@ -31,6 +31,7 @@ interface FileTreeProps {
   activeWorktreePath?: string | null;
   onSelectWorktree?: (path: string | null) => void;
   currentBranch?: string;
+  stagedFiles?: Set<string>;
 }
 
 export const FileTree: React.FC<FileTreeProps> = ({
@@ -52,6 +53,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
   activeWorktreePath,
   onSelectWorktree,
   currentBranch,
+  stagedFiles,
 }) => {
   // Keyboard navigation: j/k or arrow keys
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -142,6 +144,14 @@ export const FileTree: React.FC<FileTreeProps> = ({
             Files
           </span>
           <div className="flex items-center gap-1.5">
+            {stagedFiles && stagedFiles.size > 0 && (
+              <>
+                <span className="text-xs text-primary font-medium">
+                  {stagedFiles.size} added
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+              </>
+            )}
             <span className="text-xs text-muted-foreground">
               {viewedFiles.size}/{files.length}
             </span>
@@ -247,6 +257,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
             onToggleViewed={onToggleViewed}
             hideViewedFiles={hideViewedFiles}
             getAnnotationCount={getAnnotationCount}
+            stagedFiles={stagedFiles}
           />
         ))}
       </div>

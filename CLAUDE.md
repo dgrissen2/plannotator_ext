@@ -177,6 +177,7 @@ Send Annotations → feedback sent to agent session
 | --------------------- | ------ | ------------------------------------------ |
 | `/api/diff`           | GET    | Returns `{ rawPatch, gitRef, origin }`     |
 | `/api/file-content`   | GET    | Returns `{ oldContent, newContent }` for expandable diff context |
+| `/api/git-add`        | POST   | Stage/unstage a file (body: `{ filePath, undo? }`) |
 | `/api/feedback`       | POST   | Submit review (body: feedback, annotations, agentSwitch) |
 | `/api/image`          | GET    | Serve image by path query param            |
 | `/api/upload`         | POST   | Upload image, returns `{ path, originalName }` |

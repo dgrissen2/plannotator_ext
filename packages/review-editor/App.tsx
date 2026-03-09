@@ -11,6 +11,7 @@ import { getAgentSwitchSettings, getEffectiveAgentName } from '@plannotator/ui/u
 import { CodeAnnotation, CodeAnnotationType, SelectedLineRange } from '@plannotator/ui/types';
 import { useResizablePanel } from '@plannotator/ui/hooks/useResizablePanel';
 import { useCodeAnnotationDraft } from '@plannotator/ui/hooks/useCodeAnnotationDraft';
+import { useGitAdd } from './hooks/useGitAdd';
 import { useEditorAnnotations } from '@plannotator/ui/hooks/useEditorAnnotations';
 import { exportEditorAnnotations } from '@plannotator/ui/utils/parser';
 import { ResizeHandle } from '@plannotator/ui/components/ResizeHandle';
@@ -352,7 +353,7 @@ const ReviewApp: React.FC = () => {
       const lastColon = rest.lastIndexOf(':');
       if (lastColon !== -1) {
         const sub = rest.slice(lastColon + 1);
-        if (['uncommitted', 'last-commit', 'branch'].includes(sub)) {
+        if (['uncommitted', 'staged', 'unstaged', 'last-commit', 'branch'].includes(sub)) {
           return { activeWorktreePath: rest.slice(0, lastColon), activeDiffBase: sub };
         }
       }
@@ -360,6 +361,16 @@ const ReviewApp: React.FC = () => {
     }
     return { activeWorktreePath: null, activeDiffBase: diffType };
   }, [diffType]);
+
+  // Git add/staging logic
+  const handleFileViewedFromStage = useCallback(
+    (path: string) => setViewedFiles(prev => new Set(prev).add(path)),
+    [],
+  );
+  const { stagedFiles, stagingFile, canStageFiles, stageFile, resetStagedFiles, stageError } = useGitAdd({
+    activeDiffBase,
+    onFileViewed: handleFileViewedFromStage,
+  });
 
   // Shared helper: fetch a diff switch and update state
   const fetchDiffSwitch = useCallback(async (fullDiffType: string) => {
@@ -385,13 +396,14 @@ const ReviewApp: React.FC = () => {
       setActiveFileIndex(0);
       setPendingSelection(null);
       setDiffError(data.error || null);
+      resetStagedFiles();
     } catch (err) {
       console.error('Failed to switch diff:', err);
       setDiffError(err instanceof Error ? err.message : 'Failed to switch diff');
     } finally {
       setIsLoadingDiff(false);
     }
-  }, []);
+  }, [resetStagedFiles]);
 
   // Switch diff type (uncommitted, last-commit, branch) — composes worktree prefix if active
   const handleDiffSwitch = useCallback(async (baseDiffType: string) => {
@@ -808,6 +820,7 @@ const ReviewApp: React.FC = () => {
                 activeWorktreePath={activeWorktreePath}
                 onSelectWorktree={handleWorktreeSwitch}
                 currentBranch={gitContext?.currentBranch}
+                stagedFiles={stagedFiles}
               />
               <ResizeHandle {...fileTreeResize.handleProps} />
             </>
@@ -841,6 +854,11 @@ const ReviewApp: React.FC = () => {
                 onDeleteAnnotation={handleDeleteAnnotation}
                 isViewed={viewedFiles.has(activeFile.path)}
                 onToggleViewed={() => handleToggleViewed(activeFile.path)}
+                isStaged={stagedFiles.has(activeFile.path)}
+                isStaging={stagingFile === activeFile.path}
+                onStage={() => stageFile(activeFile.path)}
+                canStage={canStageFiles}
+                stageError={stageError}
               />
             ) : (
               <div className="h-full flex items-center justify-center">

@@ -347,6 +347,18 @@ diffs-container {
   opacity: 0.8;
 }
 
+.file-tree-item.staged {
+  background: oklch(from var(--success) l c h / 0.1);
+}
+
+.file-tree-item.staged:hover {
+  background: var(--muted);
+}
+
+.file-tree-item.staged.active {
+  background: var(--primary);
+}
+
 /* Annotation toolbar for code review */
 .review-toolbar {
   position: absolute;
