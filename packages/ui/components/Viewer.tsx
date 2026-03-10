@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Highlighter from '@plannotator/web-highlighter';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github-dark.css';
@@ -9,6 +10,7 @@ import { CommentPopover } from './CommentPopover';
 import { TaterSpriteSitting } from './TaterSpriteSitting';
 import { AttachmentsButton } from './AttachmentsButton';
 import { MermaidBlock } from './MermaidBlock';
+import { getImageSrc } from './ImageThumbnail';
 import { getIdentity } from '../utils/identity';
 import { PlanDiffBadge } from './plan-diff/PlanDiffBadge';
 import { PinpointOverlay } from './PinpointOverlay';
@@ -31,6 +33,7 @@ interface ViewerProps {
   repoInfo?: { display: string; branch?: string } | null;
   stickyActions?: boolean;
   onOpenLinkedDoc?: (path: string) => void;
+  imageBaseDir?: string;
   linkedDocInfo?: { filepath: string; onBack: () => void; label?: string } | null;
   // Plan diff props
   planDiffStats?: { additions: number; deletions: number; modifications: number } | null;
@@ -103,8 +106,10 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
   showDemoBadge,
   onOpenLinkedDoc,
   linkedDocInfo,
+  imageBaseDir,
 }, ref) => {
   const [copied, setCopied] = useState(false);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const globalCommentButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleCopyPlan = async () => {
@@ -890,7 +895,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
           group.type === 'list-group' ? (
             <div key={group.key} data-pinpoint-group="list" className="py-1 -mx-2 px-2">
               {group.blocks.map(block => (
-                <BlockRenderer key={block.id} block={block} onOpenLinkedDoc={onOpenLinkedDoc} />
+                <BlockRenderer imageBaseDir={imageBaseDir} onImageClick={(src, alt) => setLightbox({ src, alt })} key={block.id} block={block} onOpenLinkedDoc={onOpenLinkedDoc} />
               ))}
             </div>
           ) : group.block.type === 'code' && group.block.language === 'mermaid' ? (
@@ -926,7 +931,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
               isHovered={inputMethod !== 'pinpoint' && hoveredCodeBlock?.block.id === group.block.id}
             />
           ) : (
-            <BlockRenderer key={group.block.id} block={group.block} onOpenLinkedDoc={onOpenLinkedDoc} />
+            <BlockRenderer imageBaseDir={imageBaseDir} onImageClick={(src, alt) => setLightbox({ src, alt })} key={group.block.id} block={group.block} onOpenLinkedDoc={onOpenLinkedDoc} />
           )
         )}
 
@@ -988,14 +993,48 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
           />
         )}
       </article>
+
+      {/* Image lightbox */}
+      {lightbox && createPortal(
+        <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />,
+        document.body
+      )}
     </div>
   );
 });
 
+/** Simple lightbox overlay for enlarged image viewing. */
+const ImageLightbox: React.FC<{ src: string; alt: string; onClose: () => void }> = ({ src, alt, onClose }) => {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm cursor-zoom-out"
+      onClick={onClose}
+    >
+      <img
+        src={src}
+        alt={alt}
+        className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      />
+      {alt && (
+        <div className="mt-3 text-sm text-white/70 max-w-[90vw] text-center truncate">{alt}</div>
+      )}
+    </div>
+  );
+};
+
 /**
  * Renders inline markdown: **bold**, *italic*, `code`, [links](url)
  */
-const InlineMarkdown: React.FC<{ text: string; onOpenLinkedDoc?: (path: string) => void }> = ({ text, onOpenLinkedDoc }) => {
+const InlineMarkdown: React.FC<{ text: string; onOpenLinkedDoc?: (path: string) => void; imageBaseDir?: string; onImageClick?: (src: string, alt: string) => void }> = ({ text, onOpenLinkedDoc, imageBaseDir, onImageClick }) => {
   const parts: React.ReactNode[] = [];
   let remaining = text;
   let key = 0;
@@ -1004,7 +1043,7 @@ const InlineMarkdown: React.FC<{ text: string; onOpenLinkedDoc?: (path: string) 
     // Bold: **text**
     let match = remaining.match(/^\*\*(.+?)\*\*/);
     if (match) {
-      parts.push(<strong key={key++} className="font-semibold"><InlineMarkdown text={match[1]} onOpenLinkedDoc={onOpenLinkedDoc} /></strong>);
+      parts.push(<strong key={key++} className="font-semibold"><InlineMarkdown imageBaseDir={imageBaseDir} onImageClick={onImageClick} text={match[1]} onOpenLinkedDoc={onOpenLinkedDoc} /></strong>);
       remaining = remaining.slice(match[0].length);
       continue;
     }
@@ -1012,7 +1051,7 @@ const InlineMarkdown: React.FC<{ text: string; onOpenLinkedDoc?: (path: string) 
     // Italic: *text*
     match = remaining.match(/^\*(.+?)\*/);
     if (match) {
-      parts.push(<em key={key++}><InlineMarkdown text={match[1]} onOpenLinkedDoc={onOpenLinkedDoc} /></em>);
+      parts.push(<em key={key++}><InlineMarkdown imageBaseDir={imageBaseDir} onImageClick={onImageClick} text={match[1]} onOpenLinkedDoc={onOpenLinkedDoc} /></em>);
       remaining = remaining.slice(match[0].length);
       continue;
     }
@@ -1059,6 +1098,26 @@ const InlineMarkdown: React.FC<{ text: string; onOpenLinkedDoc?: (path: string) 
           <span key={key++} className="text-primary">{display}</span>
         );
       }
+      remaining = remaining.slice(match[0].length);
+      continue;
+    }
+
+    // Images: ![alt](path)
+    match = remaining.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+    if (match) {
+      const alt = match[1];
+      const src = match[2];
+      const imgSrc = /^https?:\/\//.test(src) ? src : getImageSrc(src, imageBaseDir);
+      parts.push(
+        <img
+          key={key++}
+          src={imgSrc}
+          alt={alt}
+          className="max-w-full rounded my-2 cursor-zoom-in"
+          loading="lazy"
+          onClick={(e) => { e.stopPropagation(); onImageClick?.(imgSrc, alt); }}
+        />
+      );
       remaining = remaining.slice(match[0].length);
       continue;
     }
@@ -1119,7 +1178,7 @@ const InlineMarkdown: React.FC<{ text: string; onOpenLinkedDoc?: (path: string) 
     }
 
     // Find next special character or consume one regular character
-    const nextSpecial = remaining.slice(1).search(/[\*`\[]/);
+    const nextSpecial = remaining.slice(1).search(/[\*`\[!]/);
     if (nextSpecial === -1) {
       parts.push(remaining);
       break;
@@ -1183,7 +1242,7 @@ function groupBlocks(blocks: Block[]): RenderGroup[] {
   return groups;
 }
 
-const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) => void }> = ({ block, onOpenLinkedDoc }) => {
+const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) => void; imageBaseDir?: string; onImageClick?: (src: string, alt: string) => void }> = ({ block, onOpenLinkedDoc, imageBaseDir, onImageClick }) => {
   switch (block.type) {
     case 'heading':
       const Tag = `h${block.level || 1}` as keyof JSX.IntrinsicElements;
@@ -1193,7 +1252,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
         3: 'text-base font-semibold mb-2 mt-6 text-foreground/80',
       }[block.level || 1] || 'text-base font-semibold mb-2 mt-4';
 
-      return <Tag className={styles} data-block-id={block.id} data-block-type="heading"><InlineMarkdown text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} /></Tag>;
+      return <Tag className={styles} data-block-id={block.id} data-block-type="heading"><InlineMarkdown imageBaseDir={imageBaseDir} onImageClick={onImageClick} text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} /></Tag>;
 
     case 'blockquote':
       return (
@@ -1201,7 +1260,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
           className="border-l-2 border-primary/50 pl-4 my-4 text-muted-foreground italic"
           data-block-id={block.id}
         >
-          <InlineMarkdown text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} />
+          <InlineMarkdown imageBaseDir={imageBaseDir} onImageClick={onImageClick} text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} />
         </blockquote>
       );
 
@@ -1232,7 +1291,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
             )}
           </span>
           <span className={`text-sm leading-relaxed ${isCheckbox && block.checked ? 'text-muted-foreground line-through' : 'text-foreground/90'}`}>
-            <InlineMarkdown text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} />
+            <InlineMarkdown imageBaseDir={imageBaseDir} onImageClick={onImageClick} text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} />
           </span>
         </div>
       );
@@ -1253,7 +1312,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
                     key={i}
                     className="px-3 py-2 text-left font-semibold text-foreground/90 bg-muted/30"
                   >
-                    <InlineMarkdown text={header} onOpenLinkedDoc={onOpenLinkedDoc} />
+                    <InlineMarkdown imageBaseDir={imageBaseDir} onImageClick={onImageClick} text={header} onOpenLinkedDoc={onOpenLinkedDoc} />
                   </th>
                 ))}
               </tr>
@@ -1263,7 +1322,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
                 <tr key={rowIdx} className="border-b border-border/50 hover:bg-muted/20">
                   {row.map((cell, cellIdx) => (
                     <td key={cellIdx} className="px-3 py-2 text-foreground/80">
-                      <InlineMarkdown text={cell} onOpenLinkedDoc={onOpenLinkedDoc} />
+                      <InlineMarkdown imageBaseDir={imageBaseDir} onImageClick={onImageClick} text={cell} onOpenLinkedDoc={onOpenLinkedDoc} />
                     </td>
                   ))}
                 </tr>
@@ -1283,7 +1342,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
           className="mb-4 leading-relaxed text-foreground/90 text-[15px]"
           data-block-id={block.id}
         >
-          <InlineMarkdown text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} />
+          <InlineMarkdown imageBaseDir={imageBaseDir} onImageClick={onImageClick} text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} />
         </p>
       );
   }
