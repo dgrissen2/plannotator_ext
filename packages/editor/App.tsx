@@ -506,9 +506,19 @@ const App: React.FC = () => {
     if (vaultBrowser.activeFile && vaultPath) {
       linkedDocHook.open(docPath, buildVaultDocUrl(vaultPath));
     } else {
-      linkedDocHook.open(docPath);
+      // Pass the current file's directory as base for relative path resolution
+      const baseDir = linkedDocHook.filepath
+        ? linkedDocHook.filepath.replace(/\/[^/]+$/, '')
+        : imageBaseDir;
+      if (baseDir) {
+        linkedDocHook.open(docPath, (path) =>
+          `/api/doc?path=${encodeURIComponent(path)}&base=${encodeURIComponent(baseDir)}`
+        );
+      } else {
+        linkedDocHook.open(docPath);
+      }
     }
-  }, [vaultBrowser.activeFile, vaultPath, linkedDocHook, buildVaultDocUrl]);
+  }, [vaultBrowser.activeFile, vaultPath, linkedDocHook, buildVaultDocUrl, imageBaseDir]);
 
   // Wrap linked doc back to also clear vault active file
   const handleLinkedDocBack = React.useCallback(() => {
