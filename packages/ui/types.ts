@@ -6,7 +6,7 @@ export enum AnnotationType {
   GLOBAL_COMMENT = 'GLOBAL_COMMENT',
 }
 
-export type EditorMode = 'selection' | 'comment' | 'redline';
+export type EditorMode = 'selection' | 'comment' | 'redline' | 'quickLabel';
 
 export type InputMethod = 'drag' | 'pinpoint';
 
@@ -26,6 +26,9 @@ export interface Annotation {
   createdA: number;
   author?: string; // Tater identity for collaborative sharing
   images?: ImageAttachment[]; // Attached images with human-readable names
+  isQuickLabel?: boolean; // true if created via quick label chip
+  quickLabelTip?: string; // optional instruction tip from the label definition
+  diffContext?: 'added' | 'removed' | 'modified'; // set when annotation created in plan diff view
   // web-highlighter metadata for cross-element selections
   startMeta?: {
     parentTagName: string;
@@ -58,10 +61,12 @@ export interface DiffResult {
 
 // Code Review Types
 export type CodeAnnotationType = 'comment' | 'suggestion' | 'concern';
+export type CodeAnnotationScope = 'line' | 'file';
 
 export interface CodeAnnotation {
   id: string;
   type: CodeAnnotationType;
+  scope?: CodeAnnotationScope; // Defaults to 'line' for backward compatibility
   filePath: string;
   lineStart: number;
   lineEnd: number;

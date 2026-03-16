@@ -46,12 +46,13 @@ plannotator/
 │   │   ├── ide.ts                # VS Code diff integration (openEditorDiff)
 │   │   ├── editor-annotations.ts  # VS Code editor annotation endpoints
 │   │   └── project.ts            # Project name detection for tags
-│   ├── ui/                       # Shared React components
+│   ├── ui/                       # Shared React components + theme
+│   │   ├── theme.css             # Single source of truth for color tokens + Tailwind bridge
 │   │   ├── components/           # Viewer, Toolbar, Settings, etc.
 │   │   │   ├── plan-diff/        # PlanDiffBadge, PlanDiffViewer, clean/raw diff views
 │   │   │   └── sidebar/          # SidebarContainer, SidebarTabs, VersionBrowser
 │   │   ├── utils/                # parser.ts, sharing.ts, storage.ts, planSave.ts, agentSwitch.ts, planDiffEngine.ts
-│   │   ├── hooks/                # useSharing.ts, usePlanDiff.ts, useSidebar.ts, useLinkedDoc.ts, useAnnotationDraft.ts, useCodeAnnotationDraft.ts
+│   │   ├── hooks/                # useAnnotationHighlighter.ts, useSharing.ts, usePlanDiff.ts, useSidebar.ts, useLinkedDoc.ts, useAnnotationDraft.ts, useCodeAnnotationDraft.ts
 │   │   └── types.ts
 │   ├── shared/                   # Cross-package types (EditorAnnotation)
 │   ├── editor/                   # Plan review App.tsx
@@ -226,6 +227,10 @@ When a user denies a plan and Claude resubmits, the UI shows what changed betwee
 
 **State** (`packages/ui/hooks/usePlanDiff.ts`): Manages base version selection, diff computation, and version fetching. The server sends `previousPlan` with the initial `/api/plan` response; the hook auto-diffs against it. Users can select any prior version from the sidebar Version Browser.
 
+**Diff annotations:** The clean diff view supports block-level annotation — hover over added/removed/modified sections to annotate entire blocks. Annotations carry a `diffContext` field (`added`/`removed`/`modified`). Exported feedback includes `[In diff content]` labels.
+
+**Annotation hook** (`packages/ui/hooks/useAnnotationHighlighter.ts`): Annotation infrastructure used by `Viewer.tsx`. Manages web-highlighter lifecycle, toolbar/popover state, annotation creation, text-based restoration, and scroll-to-selected. The diff view uses its own block-level hover system instead.
+
 **Sidebar** (`packages/ui/hooks/useSidebar.ts`): Shared left sidebar with two tabs — Table of Contents and Version Browser. The "Auto-open Sidebar" setting controls whether it opens on load (TOC tab only).
 
 ## Data Types
@@ -257,6 +262,7 @@ interface Annotation {
   createdA: number; // Timestamp
   author?: string; // Tater identity
   images?: ImageAttachment[]; // Attached images with names
+  diffContext?: 'added' | 'removed' | 'modified'; // Set when annotation created in plan diff view
   startMeta?: { parentTagName; parentIndex; textOffset };
   endMeta?: { parentTagName; parentIndex; textOffset };
 }
@@ -285,7 +291,7 @@ interface Block {
 - Horizontal rules (`---`)
 - Paragraphs (default)
 
-`exportAnnotations(blocks, annotations, globalAttachments)` generates human-readable feedback for Claude. Images are referenced by name: `[image-name] /tmp/path...`.
+`exportAnnotations(blocks, annotations, globalAttachments)` generates human-readable feedback for Claude. Images are referenced by name: `[image-name] /tmp/path...`. Annotations with `diffContext` include `[In diff content]` labels.
 
 ## Annotation System
 
@@ -310,6 +316,7 @@ interface SharePayload {
   p: string; // Plan markdown
   a: ShareableAnnotation[]; // Compact annotations
   g?: ShareableImage[]; // Global attachments
+  d?: (string | null)[]; // diffContext per annotation, parallel to `a`
 }
 
 type ShareableAnnotation =

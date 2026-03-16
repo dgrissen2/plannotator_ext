@@ -1,4 +1,5 @@
 import { Block, type Annotation, type EditorAnnotation, type ImageAttachment } from '../types';
+import { planDenyFeedback } from '@plannotator/shared/feedback-templates';
 
 /**
  * Parsed YAML frontmatter as key-value pairs.
@@ -243,6 +244,10 @@ export const parseMarkdownToBlocks = (markdown: string): Block[] => {
   return blocks;
 };
 
+/** Wrap feedback output with the deny preamble for pasting into agent sessions */
+export const wrapFeedbackForAgent = (feedback: string): string =>
+  planDenyFeedback(feedback);
+
 export const exportAnnotations = (blocks: Block[], annotations: any[], globalAttachments: ImageAttachment[] = []): string => {
   if (annotations.length === 0 && globalAttachments.length === 0) {
     return 'No changes detected.';
@@ -277,6 +282,11 @@ export const exportAnnotations = (blocks: Block[], annotations: any[], globalAtt
 
     output += `## ${index + 1}. `;
 
+    // Add diff context label if annotation was created in diff view
+    if (ann.diffContext) {
+      output += `[In diff content] `;
+    }
+
     switch (ann.type) {
       case 'DELETION':
         output += `Remove this\n`;
@@ -296,8 +306,15 @@ export const exportAnnotations = (blocks: Block[], annotations: any[], globalAtt
         break;
 
       case 'COMMENT':
-        output += `Feedback on: "${ann.originalText}"\n`;
-        output += `> ${ann.text}\n`;
+        if (ann.isQuickLabel) {
+          output += `[${ann.text}] Feedback on: "${ann.originalText}"\n`;
+          if (ann.quickLabelTip) {
+            output += `> ${ann.quickLabelTip}\n`;
+          }
+        } else {
+          output += `Feedback on: "${ann.originalText}"\n`;
+          output += `> ${ann.text}\n`;
+        }
         break;
 
       case 'GLOBAL_COMMENT':
@@ -318,6 +335,21 @@ export const exportAnnotations = (blocks: Block[], annotations: any[], globalAtt
   });
 
   output += `---\n`;
+
+  // Quick Label Summary
+  const labeledAnns = sortedAnns.filter((a: any) => a.isQuickLabel && a.text);
+  if (labeledAnns.length > 0) {
+    const grouped = new Map<string, number>();
+    labeledAnns.forEach((a: any) => {
+      grouped.set(a.text, (grouped.get(a.text) || 0) + 1);
+    });
+
+    output += `\n## Label Summary\n\n`;
+    for (const [text, count] of grouped) {
+      output += `- **${text}**: ${count}\n`;
+    }
+    output += '\n';
+  }
 
   return output;
 };

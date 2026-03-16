@@ -4,8 +4,9 @@
 
 # Plannotator
 
-Interactive Plan Review for AI Coding Agents. Mark up and refine your plans using a visual UI, share for team collaboration, and seamlessly integrate with **Claude Code**, **OpenCode**, **Pi**, and **Codex**.
+Interactive Plan & Code Review for AI Coding Agents. Mark up and refine your plans or code diffs using a visual UI, share for team collaboration, and seamlessly integrate with **Claude Code**, **OpenCode**, **Pi**, and **Codex**.
 
+**Plan Mode Demos:**
 <table>
 <tr>
 <td align="center" width="50%">
@@ -25,6 +26,8 @@ Interactive Plan Review for AI Coding Agents. Mark up and refine your plans usin
 </tr>
 </table>
 
+**New:** [Code Review](https://x.com/backnotprop/status/2031145299738263567?s=20)
+
 
 ### Features
 
@@ -39,12 +42,11 @@ Interactive Plan Review for AI Coding Agents. Mark up and refine your plans usin
 
 Plannotator lets you privately share plans, annotations, and feedback with colleagues. For example, a colleague can annotate a shared plan, and you can import their feedback to send directly back to the coding agent.
 
-**Small plans** are encoded entirely in the URL hash — no server involved, nothing stored anywhere. The data never leaves your browser.
+**Small plans** are encoded entirely in the URL hash. No server involved, nothing stored anywhere.
 
-**Large plans** use a short link service with **end-to-end encryption**. Your plan is encrypted with AES-256-GCM in your browser before it's uploaded — the server stores only ciphertext it cannot read. The decryption key lives only in the URL you share and is never sent to the server. Pastes auto-delete after 7 days.
+**Large plans** use a short link service with **end-to-end encryption**. Your plan is encrypted with AES-256-GCM in your browser before upload. The server stores only ciphertext it cannot read. The decryption key lives only in the URL you share. Pastes auto-delete after 7 days.
 
-- Zero-knowledge storage — not even the service operator can read stored plans (similar to [PrivateBin](https://privatebin.info/))
-- No accounts, no tracking, no cookies on the share portal
+- Zero-knowledge storage, similar to [PrivateBin](https://privatebin.info/)
 - Fully open source and self-hostable ([see docs](https://plannotator.ai/docs/guides/sharing-and-collaboration/))
 
 ## Install
