@@ -13,7 +13,7 @@
 
 import { isRemoteSession, getServerPort } from "./remote";
 import { getRepoInfo } from "./repo";
-import { handleImage, handleUpload, handleServerReady, handleDraftSave, handleDraftLoad, handleDraftDelete } from "./shared-handlers";
+import { handleImage, handleUpload, handleServerReady, handleDraftSave, handleDraftLoad, handleDraftDelete, handleFavicon } from "./shared-handlers";
 import { contentHash, deleteDraft } from "./draft";
 
 // Re-export utilities
@@ -165,6 +165,9 @@ export async function startAnnotateServer(
               return Response.json({ error: message }, { status: 500 });
             }
           }
+
+          // Favicon
+          if (url.pathname === "/favicon.svg") return handleFavicon();
 
           // Serve embedded HTML for all other routes (SPA)
           return new Response(htmlContent, {
