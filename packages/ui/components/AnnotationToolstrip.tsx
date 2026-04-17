@@ -8,6 +8,9 @@ interface AnnotationToolstripProps {
   mode: EditorMode;
   onModeChange: (mode: EditorMode) => void;
   taterMode?: boolean;
+  showWideMode?: boolean;
+  wideMode?: boolean;
+  onWideModeToggle?: () => void;
   /**
    * Compact mode: used inside the sticky header lane. Buttons only expand for
    * the active mode (no hover expansion), gap is tightened, and the help link
@@ -28,6 +31,9 @@ export const AnnotationToolstrip: React.FC<AnnotationToolstripProps> = ({
   mode,
   onModeChange,
   taterMode,
+  showWideMode = false,
+  wideMode = false,
+  onWideModeToggle,
   compact = false,
   iconOnly = false,
 }) => {
@@ -142,6 +148,29 @@ export const AnnotationToolstrip: React.FC<AnnotationToolstripProps> = ({
               </svg>
             }
           />
+          {showWideMode && onWideModeToggle && (
+            <ToolstripButton
+              active={wideMode}
+              onClick={onWideModeToggle}
+              label="Wide"
+              color="primary"
+              mounted={mounted}
+              compact={compact}
+              iconOnly={iconOnly}
+              icon={
+                <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 8V5h3" />
+                  <path d="M21 8V5h-3" />
+                  <path d="M3 16v3h3" />
+                  <path d="M21 16v3h-3" />
+                  <path d="M8 5H6" />
+                  <path d="M18 5h-2" />
+                  <path d="M8 19H6" />
+                  <path d="M18 19h-2" />
+                </svg>
+              }
+            />
+          )}
         </div>
 
         {/* Help */}

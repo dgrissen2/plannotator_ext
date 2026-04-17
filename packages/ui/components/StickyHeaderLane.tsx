@@ -62,6 +62,9 @@ interface StickyHeaderLaneProps {
   mode: EditorMode;
   onModeChange: (mode: EditorMode) => void;
   taterMode?: boolean;
+  showWideMode?: boolean;
+  wideMode?: boolean;
+  onWideModeToggle?: () => void;
 
   // Badge state
   repoInfo?: { display: string; branch?: string } | null;
@@ -72,7 +75,7 @@ interface StickyHeaderLaneProps {
   archiveInfo?: { status: 'approved' | 'denied' | 'unknown'; timestamp: string; title: string } | null;
 
   // Layout
-  maxWidth?: number;
+  maxWidth?: number | null;
 
   // Re-query token for the [data-sticky-actions] ResizeObserver. When the
   // Viewer remounts (e.g., toggling a linked doc), its `data-sticky-actions`
@@ -89,6 +92,9 @@ export const StickyHeaderLane: React.FC<StickyHeaderLaneProps> = ({
   mode,
   onModeChange,
   taterMode,
+  showWideMode = false,
+  wideMode = false,
+  onWideModeToggle,
   repoInfo,
   planDiffStats,
   isPlanDiffActive,
@@ -196,7 +202,7 @@ export const StickyHeaderLane: React.FC<StickyHeaderLaneProps> = ({
         className={`sticky z-[60] w-full self-center pointer-events-none ${
           isNarrow ? 'top-[52px] md:top-[60px]' : 'top-3'
         }`}
-        style={{ maxWidth, height: 0 }}
+        style={maxWidth == null ? { height: 0 } : { maxWidth, height: 0 }}
       >
         {/* Responsive bar.
 
@@ -239,6 +245,9 @@ export const StickyHeaderLane: React.FC<StickyHeaderLaneProps> = ({
               mode={mode}
               onModeChange={onModeChange}
               taterMode={taterMode}
+              showWideMode={showWideMode}
+              wideMode={wideMode}
+              onWideModeToggle={onWideModeToggle}
               compact
               iconOnly={isNarrow || isToolstripIconOnly}
             />
