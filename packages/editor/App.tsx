@@ -8,6 +8,7 @@ import { ImportModal } from '@plannotator/ui/components/ImportModal';
 import { ConfirmDialog } from '@plannotator/ui/components/ConfirmDialog';
 import { Annotation, Block, EditorMode, type InputMethod, type ImageAttachment, type ActionsLabelMode } from '@plannotator/ui/types';
 import { ThemeProvider } from '@plannotator/ui/components/ThemeProvider';
+import { Tooltip, TooltipProvider } from '@plannotator/ui/components/Tooltip';
 import { AnnotationToolstrip } from '@plannotator/ui/components/AnnotationToolstrip';
 import { StickyHeaderLane } from '@plannotator/ui/components/StickyHeaderLane';
 import { TaterSpriteRunning } from '@plannotator/ui/components/TaterSpriteRunning';
@@ -72,7 +73,7 @@ import type { PlanDiffMode } from '@plannotator/ui/components/plan-diff/PlanDiff
 // same env var on the server side so V2/V3 stay paired.
 import { DEMO_PLAN_CONTENT as DEFAULT_DEMO_PLAN_CONTENT } from './demoPlan';
 import { DIFF_DEMO_PLAN_CONTENT } from './demoPlanDiffDemo';
-import { canUseAnnotateWideMode, resolveWideModeExitLayout, type WideModeLayoutSnapshot } from './wideMode';
+import { canUseAnnotateWideMode, resolveWideModeExitLayout, type WideModeLayoutSnapshot, type WideModeType } from './wideMode';
 const USE_DIFF_DEMO =
   import.meta.env.VITE_DIFF_DEMO === '1' ||
   import.meta.env.VITE_DIFF_DEMO === 'true';
@@ -162,7 +163,7 @@ const App: React.FC = () => {
   const [pasteApiUrl, setPasteApiUrl] = useState<string | undefined>(undefined);
   const [repoInfo, setRepoInfo] = useState<{ display: string; branch?: string } | null>(null);
   const [projectRoot, setProjectRoot] = useState<string | null>(null);
-  const [isWideMode, setIsWideMode] = useState(false);
+  const [wideModeType, setWideModeType] = useState<WideModeType | null>(null);
   const wideModeSnapshotRef = useRef<WideModeLayoutSnapshot | null>(null);
   const lastAppliedTocEnabledRef = useRef(uiPrefs.tocEnabled);
 
@@ -207,7 +208,7 @@ const App: React.FC = () => {
     sidebarTab?: SidebarTab;
     panelOpen?: boolean;
   }) => {
-    if (!isWideMode) {
+    if (wideModeType === null) {
       if (options?.sidebarTab) sidebar.open(options.sidebarTab);
       if (options?.panelOpen === true) setIsPanelOpen(true);
       else if (options?.panelOpen === false) setIsPanelOpen(false);
@@ -217,7 +218,7 @@ const App: React.FC = () => {
     const snapshot = wideModeSnapshotRef.current;
     const layout = resolveWideModeExitLayout(snapshot, options);
 
-    setIsWideMode(false);
+    setWideModeType(null);
     wideModeSnapshotRef.current = null;
 
     if (layout.sidebarOpen && layout.sidebarTab) {
@@ -229,40 +230,40 @@ const App: React.FC = () => {
     if (layout.panelOpen !== undefined) {
       setIsPanelOpen(layout.panelOpen);
     }
-  }, [isWideMode, sidebar.close, sidebar.open]);
+  }, [wideModeType, sidebar.close, sidebar.open]);
 
   const openSidebarTab = useCallback((tab: SidebarTab) => {
-    if (isWideMode) {
+    if (wideModeType !== null) {
       exitWideMode({ restore: false, sidebarTab: tab, panelOpen: false });
       return;
     }
     sidebar.open(tab);
-  }, [exitWideMode, isWideMode, sidebar.open]);
+  }, [exitWideMode, wideModeType, sidebar.open]);
 
   const toggleSidebarTab = useCallback((tab: SidebarTab) => {
-    if (isWideMode) {
+    if (wideModeType !== null) {
       exitWideMode({ restore: false, sidebarTab: tab, panelOpen: false });
       return;
     }
     sidebar.toggleTab(tab);
-  }, [exitWideMode, isWideMode, sidebar.toggleTab]);
+  }, [exitWideMode, wideModeType, sidebar.toggleTab]);
 
   const handleAnnotationPanelToggle = useCallback(() => {
-    if (isWideMode) {
+    if (wideModeType !== null) {
       exitWideMode({ restore: false, panelOpen: true });
       return;
     }
     setIsPanelOpen(prev => !prev);
-  }, [exitWideMode, isWideMode]);
+  }, [exitWideMode, wideModeType]);
 
   // Sync sidebar open state when preference changes in Settings
   useEffect(() => {
-    if (isWideMode) return;
+    if (wideModeType !== null) return;
     if (lastAppliedTocEnabledRef.current === uiPrefs.tocEnabled) return;
     lastAppliedTocEnabledRef.current = uiPrefs.tocEnabled;
     if (uiPrefs.tocEnabled) sidebar.open('toc');
     else sidebar.close();
-  }, [isWideMode, sidebar.close, sidebar.open, uiPrefs.tocEnabled]);
+  }, [wideModeType, sidebar.close, sidebar.open, uiPrefs.tocEnabled]);
 
   // Clear diff view when switching away from versions tab
   useEffect(() => {
@@ -317,33 +318,33 @@ const App: React.FC = () => {
     isPlanDiffActive,
   }), [annotateMode, archive.archiveMode, isPlanDiffActive]);
 
-  const enterWideMode = useCallback(() => {
-    if (!canUseWideMode || isWideMode) return;
-
-    wideModeSnapshotRef.current = {
-      sidebarIsOpen: sidebar.isOpen,
-      sidebarTab: sidebar.activeTab,
-      panelOpen: isPanelOpen,
-    };
-
-    setIsWideMode(true);
+  const enterViewMode = useCallback((type: WideModeType) => {
+    if (!canUseWideMode) return;
+    if (wideModeType === null) {
+      wideModeSnapshotRef.current = {
+        sidebarIsOpen: sidebar.isOpen,
+        sidebarTab: sidebar.activeTab,
+        panelOpen: isPanelOpen,
+      };
+    }
+    setWideModeType(type);
     sidebar.close();
     setIsPanelOpen(false);
-  }, [canUseWideMode, isPanelOpen, isWideMode, sidebar.activeTab, sidebar.close, sidebar.isOpen]);
+  }, [canUseWideMode, isPanelOpen, wideModeType, sidebar.activeTab, sidebar.close, sidebar.isOpen]);
 
-  const toggleWideMode = useCallback(() => {
-    if (isWideMode) {
+  const toggleViewMode = useCallback((type: WideModeType) => {
+    if (wideModeType === type) {
       exitWideMode();
     } else {
-      enterWideMode();
+      enterViewMode(type);
     }
-  }, [enterWideMode, exitWideMode, isWideMode]);
+  }, [enterViewMode, exitWideMode, wideModeType]);
 
   useEffect(() => {
-    if (!canUseWideMode && isWideMode) {
+    if (!canUseWideMode && wideModeType !== null) {
       exitWideMode();
     }
-  }, [canUseWideMode, exitWideMode, isWideMode]);
+  }, [canUseWideMode, exitWideMode, wideModeType]);
 
   // Markdown file browser (also handles vault dirs via isVault flag)
   const fileBrowser = useFileBrowser();
@@ -1068,7 +1069,7 @@ const App: React.FC = () => {
   const handleAddAnnotation = (ann: Annotation) => {
     setAnnotations(prev => [...prev, ann]);
     setSelectedAnnotationId(ann.id);
-    if (!isWideMode) {
+    if (wideModeType === null) {
       setIsPanelOpen(true);
     }
   };
@@ -1076,8 +1077,8 @@ const App: React.FC = () => {
   // Keep selection behavior explicit across mobile/wide-mode transitions.
   const handleSelectAnnotation = React.useCallback((id: string | null) => {
     setSelectedAnnotationId(id);
-    if (id && isMobile && !isWideMode) setIsPanelOpen(true);
-  }, [isMobile, isWideMode]);
+    if (id && isMobile && wideModeType === null) setIsPanelOpen(true);
+  }, [isMobile, wideModeType]);
 
   // Core annotation removal — highlight cleanup + state filter + selection clear
   const removeAnnotation = (id: string) => {
@@ -1357,11 +1358,12 @@ const App: React.FC = () => {
     const widths: Record<PlanWidth, number> = { compact: 832, default: 1040, wide: 1280 };
     return widths[uiPrefs.planWidth] ?? 832;
   }, [uiPrefs.planWidth]);
-  const annotateReaderMaxWidth = canUseWideMode && isWideMode ? null : planMaxWidth;
+  const annotateReaderMaxWidth = canUseWideMode && wideModeType === 'wide' ? null : planMaxWidth;
 
 
   return (
     <ThemeProvider defaultTheme="dark">
+      <TooltipProvider delayDuration={900} skipDelayDuration={200} disableHoverableContent>
       <div data-print-region="root" className="h-screen flex flex-col bg-background overflow-hidden">
         {/* Minimal Header */}
         <header className="h-12 flex items-center justify-between px-2 md:px-4 border-b border-border/50 bg-card/50 backdrop-blur-xl sticky top-0 z-[50]">
@@ -1570,7 +1572,7 @@ const App: React.FC = () => {
           {/* Tater sprites — inside content wrapper so z-0 stacking context applies */}
           {taterMode && <TaterSpriteRunning />}
           {/* Left Sidebar: collapsed tab flags (when sidebar is closed) */}
-          {!isWideMode && !sidebar.isOpen && (
+          {wideModeType === null && !sidebar.isOpen && (
             <SidebarTabs
               activeTab={sidebar.activeTab}
               onToggleTab={toggleSidebarTab}
@@ -1633,7 +1635,7 @@ const App: React.FC = () => {
           {/* Document Area */}
           <OverlayScrollArea
             element="main"
-            className={`flex-1 min-w-0 bg-grid ${!sidebar.isOpen && !isWideMode ? 'lg:pl-[30px]' : ''}`}
+            className={`flex-1 min-w-0 bg-grid ${!sidebar.isOpen && wideModeType === null ? 'lg:pl-[30px]' : ''}`}
             data-print-region="document"
             onViewportReady={handleViewportReady}
           >
@@ -1668,9 +1670,6 @@ const App: React.FC = () => {
                   onPlanDiffToggle={() => setIsPlanDiffActive(!isPlanDiffActive)}
                   archiveInfo={archive.currentInfo}
                   maxWidth={annotateReaderMaxWidth}
-                  showWideMode={canUseWideMode}
-                  wideMode={isWideMode}
-                  onWideModeToggle={toggleWideMode}
                   remountToken={linkedDocHook.isActive ? `doc:${linkedDocHook.filepath}` : 'plan'}
                 />
               )}
@@ -1684,9 +1683,6 @@ const App: React.FC = () => {
                     mode={editorMode}
                     onModeChange={handleEditorModeChange}
                     taterMode={taterMode}
-                    showWideMode={canUseWideMode}
-                    wideMode={isWideMode}
-                    onWideModeToggle={toggleWideMode}
                   />
                 </div>
               )}
@@ -1722,7 +1718,40 @@ const App: React.FC = () => {
                 </div>
               )}
               {/* Normal Plan View — always mounted, hidden during diff mode */}
-              <div className="w-full flex justify-center" style={{ display: (isPlanDiffActive && planDiff.diffBlocks) || (annotateSource === 'folder' && !markdown && !linkedDocHook.isActive) ? 'none' : undefined }}>
+              <div className="w-full flex justify-center relative" style={{ display: (isPlanDiffActive && planDiff.diffBlocks) || (annotateSource === 'folder' && !markdown && !linkedDocHook.isActive) ? 'none' : undefined }}>
+                {canUseWideMode && !isPlanDiffActive && !archive.archiveMode && (
+                  <div
+                    data-print-hide
+                    className="absolute -top-5 left-0 right-0 mx-auto w-full flex justify-end pointer-events-none"
+                    style={annotateReaderMaxWidth === null ? undefined : { maxWidth: annotateReaderMaxWidth ?? 832 }}
+                  >
+                    <div className={`pointer-events-auto flex items-center gap-1.5 text-[11px] tracking-wide ${taterMode ? 'mr-[60px]' : 'mr-[4px]'}`}>
+                      {(['wide', 'focus'] as const).map((type, i) => (
+                        <React.Fragment key={type}>
+                          {i > 0 && <span aria-hidden className="text-muted-foreground/30 select-none">|</span>}
+                          <Tooltip
+                            side="top"
+                            align="end"
+                            content={type === 'wide' ? 'Hide panels and expand document width' : 'Hide panels, keep document width'}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => toggleViewMode(type)}
+                              aria-pressed={wideModeType === type}
+                              className={`cursor-pointer rounded-sm transition-colors duration-150 outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:opacity-80 ${
+                                wideModeType === type
+                                  ? 'text-foreground'
+                                  : 'text-muted-foreground/50 hover:text-muted-foreground'
+                              }`}
+                            >
+                              {type.charAt(0).toUpperCase() + type.slice(1)}
+                            </button>
+                          </Tooltip>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <Viewer
                   key={linkedDocHook.isActive ? `doc:${linkedDocHook.filepath}` : 'plan'}
                   ref={viewerRef}
@@ -1762,11 +1791,11 @@ const App: React.FC = () => {
           </OverlayScrollArea>
 
           {/* Resize Handle */}
-          {isPanelOpen && !isWideMode && <ResizeHandle {...panelResize.handleProps} className="hidden md:block" side="right" />}
+          {isPanelOpen && wideModeType === null && <ResizeHandle {...panelResize.handleProps} className="hidden md:block" side="right" />}
 
           {/* Annotation Panel */}
           <AnnotationPanel
-            isOpen={isPanelOpen && !isWideMode}
+            isOpen={isPanelOpen && wideModeType === null}
             blocks={blocks}
             annotations={allAnnotations}
             selectedId={selectedAnnotationId}
@@ -1955,6 +1984,7 @@ const App: React.FC = () => {
           }}
         />
       </div>
+      </TooltipProvider>
     </ThemeProvider>
   );
 };

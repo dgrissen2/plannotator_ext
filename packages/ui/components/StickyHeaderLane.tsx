@@ -62,9 +62,6 @@ interface StickyHeaderLaneProps {
   mode: EditorMode;
   onModeChange: (mode: EditorMode) => void;
   taterMode?: boolean;
-  showWideMode?: boolean;
-  wideMode?: boolean;
-  onWideModeToggle?: () => void;
 
   // Badge state
   repoInfo?: { display: string; branch?: string } | null;
@@ -92,9 +89,6 @@ export const StickyHeaderLane: React.FC<StickyHeaderLaneProps> = ({
   mode,
   onModeChange,
   taterMode,
-  showWideMode = false,
-  wideMode = false,
-  onWideModeToggle,
   repoInfo,
   planDiffStats,
   isPlanDiffActive,
@@ -245,9 +239,6 @@ export const StickyHeaderLane: React.FC<StickyHeaderLaneProps> = ({
               mode={mode}
               onModeChange={onModeChange}
               taterMode={taterMode}
-              showWideMode={showWideMode}
-              wideMode={wideMode}
-              onWideModeToggle={onWideModeToggle}
               compact
               iconOnly={isNarrow || isToolstripIconOnly}
             />

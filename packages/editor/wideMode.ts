@@ -1,4 +1,5 @@
 import type { SidebarTab } from '@plannotator/ui/hooks/useSidebar';
+export type { WideModeType } from '@plannotator/ui/types';
 
 export type WideModeLayoutSnapshot = {
   sidebarIsOpen: boolean;
@@ -23,7 +24,7 @@ export function canUseAnnotateWideMode(options: {
   archiveMode: boolean;
   isPlanDiffActive: boolean;
 }): boolean {
-  return options.annotateMode && !options.archiveMode && !options.isPlanDiffActive;
+  return !options.archiveMode && !options.isPlanDiffActive;
 }
 
 export function resolveWideModeExitLayout(
