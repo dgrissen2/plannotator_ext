@@ -20,7 +20,6 @@ export type WideModeExitLayout = {
 };
 
 export function canUseAnnotateWideMode(options: {
-  annotateMode: boolean;
   archiveMode: boolean;
   isPlanDiffActive: boolean;
 }): boolean {

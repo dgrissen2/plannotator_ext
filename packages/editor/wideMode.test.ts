@@ -12,40 +12,24 @@ const snapshot: WideModeLayoutSnapshot = {
 };
 
 describe('canUseAnnotateWideMode', () => {
-  test('enables wide mode in both annotate and plan review, excluding archive and diff', () => {
+  test('enables wide mode outside archive and diff', () => {
     expect(canUseAnnotateWideMode({
-      annotateMode: true,
       archiveMode: false,
       isPlanDiffActive: false,
     })).toBe(true);
 
     expect(canUseAnnotateWideMode({
-      annotateMode: false,
-      archiveMode: false,
-      isPlanDiffActive: false,
-    })).toBe(true);
-
-    expect(canUseAnnotateWideMode({
-      annotateMode: true,
       archiveMode: true,
       isPlanDiffActive: false,
     })).toBe(false);
 
     expect(canUseAnnotateWideMode({
-      annotateMode: false,
-      archiveMode: true,
-      isPlanDiffActive: false,
-    })).toBe(false);
-
-    expect(canUseAnnotateWideMode({
-      annotateMode: true,
       archiveMode: false,
       isPlanDiffActive: true,
     })).toBe(false);
 
     expect(canUseAnnotateWideMode({
-      annotateMode: false,
-      archiveMode: false,
+      archiveMode: true,
       isPlanDiffActive: true,
     })).toBe(false);
   });

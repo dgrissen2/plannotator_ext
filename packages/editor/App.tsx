@@ -313,10 +313,9 @@ const App: React.FC = () => {
   });
 
   const canUseWideMode = useMemo(() => canUseAnnotateWideMode({
-    annotateMode,
     archiveMode: archive.archiveMode,
     isPlanDiffActive,
-  }), [annotateMode, archive.archiveMode, isPlanDiffActive]);
+  }), [archive.archiveMode, isPlanDiffActive]);
 
   const enterViewMode = useCallback((type: WideModeType) => {
     if (!canUseWideMode) return;
