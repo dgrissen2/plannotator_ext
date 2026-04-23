@@ -77,6 +77,16 @@ interface UseSharingResult {
 }
 
 
+// Share payloads are base64url-encoded deflate output — high entropy, mixed
+// case, often containing `=`/`_`/`-`. Plain in-page anchor slugs produced by
+// slugifyHeading() are lowercase ASCII + digits + hyphen only. When the hash
+// matches that shape we skip share parsing so `#section-overview` doesn't
+// trigger the "Shared Plan Could Not Be Loaded" dialog.
+function isPlainAnchorHash(rawHash: string): boolean {
+  const hash = rawHash.replace(/^#/, '').split('?')[0];
+  return /^[a-z0-9][a-z0-9-]*$/.test(hash);
+}
+
 export function useSharing(
   markdown: string,
   annotations: Annotation[],
@@ -153,6 +163,12 @@ export function useSharing(
       }
 
       const hash = window.location.hash.slice(1);
+
+      // Plain in-page anchor — let Viewer scroll to it, don't try share parsing.
+      if (isPlainAnchorHash(hash)) {
+        return false;
+      }
+
       const payload = await parseShareHash();
 
       if (payload) {
@@ -209,9 +225,9 @@ export function useSharing(
   // Listen for hash changes (when user pastes a new share URL)
   useEffect(() => {
     const handleHashChange = () => {
-      if (window.location.hash.length > 1) {
-        loadFromHash();
-      }
+      const hash = window.location.hash.slice(1);
+      if (!hash || isPlainAnchorHash(hash)) return;
+      loadFromHash();
     };
 
     window.addEventListener('hashchange', handleHashChange);
