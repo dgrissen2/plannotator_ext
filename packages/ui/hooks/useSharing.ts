@@ -77,14 +77,16 @@ interface UseSharingResult {
 }
 
 
-// Share payloads are base64url-encoded deflate output — high entropy, mixed
-// case, often containing `=`/`_`/`-`. Plain in-page anchor slugs produced by
-// slugifyHeading() are lowercase ASCII + digits + hyphen only. When the hash
-// matches that shape we skip share parsing so `#section-overview` doesn't
-// trigger the "Shared Plan Could Not Be Loaded" dialog.
-function isPlainAnchorHash(rawHash: string): boolean {
+// Share payloads are base64url-encoded deflate output: charset [A-Za-z0-9_-],
+// realistically >=30 chars, and virtually always mixed-case because deflate
+// output has high entropy. Plain heading anchors — whether the lowercase
+// ASCII slugs from `slugifyHeading` ("section-overview"), Unicode slugs
+// ("café", "中文-notes"), or raw HTML ids ("MySection") — miss at least one
+// of those signals. So: run share parsing only when the hash looks like a
+// share payload. Everything else is left for Viewer to scroll to (or ignore).
+function looksLikeSharePayload(rawHash: string): boolean {
   const hash = rawHash.replace(/^#/, '').split('?')[0];
-  return /^[a-z0-9][a-z0-9-]*$/.test(hash);
+  return hash.length >= 30 && /^[A-Za-z0-9_-]+$/.test(hash) && /[A-Z]/.test(hash);
 }
 
 export function useSharing(
@@ -164,8 +166,8 @@ export function useSharing(
 
       const hash = window.location.hash.slice(1);
 
-      // Plain in-page anchor — let Viewer scroll to it, don't try share parsing.
-      if (isPlainAnchorHash(hash)) {
+      // Not a share payload — leave it for Viewer to scroll to (or ignore).
+      if (!looksLikeSharePayload(hash)) {
         return false;
       }
 
@@ -225,8 +227,7 @@ export function useSharing(
   // Listen for hash changes (when user pastes a new share URL)
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.slice(1);
-      if (!hash || isPlainAnchorHash(hash)) return;
+      if (!looksLikeSharePayload(window.location.hash)) return;
       loadFromHash();
     };
 
