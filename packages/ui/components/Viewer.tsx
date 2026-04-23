@@ -314,14 +314,8 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
     const container = containerRef.current;
     if (!container || !stickyScrollViewport) return false;
 
-    const targetById = document.getElementById(anchor);
-    const target = (targetById && container.contains(targetById))
-      ? targetById
-      : Array.from(container.querySelectorAll<HTMLElement>('[data-anchor-aliases]')).find(element =>
-          element.dataset.anchorAliases?.split(/\s+/).includes(anchor)
-        );
-
-    if (!target) return false;
+    const target = document.getElementById(anchor);
+    if (!target || !container.contains(target)) return false;
 
     const stickyActionsEl = container.querySelector<HTMLElement>('[data-sticky-actions]');
     const stickyTop = stickyActionsEl

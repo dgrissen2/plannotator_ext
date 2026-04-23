@@ -7,7 +7,6 @@ import { HtmlBlock } from "./blocks/HtmlBlock";
 import { Callout } from "./blocks/Callout";
 import { AlertBlock } from "./blocks/AlertBlock";
 import { TableBlock } from "./blocks/TableBlock";
-import { getHeadingAnchorAliases } from "../utils/anchors";
 
 export const BlockRenderer: React.FC<{
   block: Block;
@@ -29,21 +28,12 @@ export const BlockRenderer: React.FC<{
         2: 'text-xl font-semibold mb-3 mt-8 text-foreground/90',
         3: 'text-base font-semibold mb-2 mt-6 text-foreground/80',
       }[block.level || 1] || 'text-base font-semibold mb-2 mt-4';
-      const anchorAliases = [
-        headingAnchorId,
-        ...getHeadingAnchorAliases(block.content),
-      ].filter(Boolean);
-      const anchorAliasTokens = anchorAliases.length > 0
-        ? [...new Set(anchorAliases)].join(' ')
-        : undefined;
-
       return (
         <Tag
           id={headingAnchorId}
           className={styles}
           data-block-id={block.id}
           data-block-type="heading"
-          data-anchor-aliases={anchorAliasTokens}
         >
           <InlineMarkdown imageBaseDir={imageBaseDir} onImageClick={onImageClick} text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} githubRepo={githubRepo} onNavigateAnchor={onNavigateAnchor} />
         </Tag>
